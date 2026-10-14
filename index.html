@@ -1,0 +1,1282 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#FAF8F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14161A" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="계획과 실제">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" href="./icon-192.png">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;font:14px system-ui,-apple-system,sans-serif}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<title>계획과 실제</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a daily log sheet — task ledger beside a 10-minute grid where planned and actual run as parallel tracks. */
+:root{
+  --bg:#FAF8F4; --surface:#FFFFFF; --surface-2:#F3F0EA;
+  --ink:#171A1F; --muted:#6E6A63; --line:#DFD9CE; --line-soft:#EEEAE2;
+  --plan:#3F5BA9; --actual:#C2622A; --ok:#2F7A57; --warn:#B4891A;
+  --font-ui:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --slot:14px; --radius:7px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#14161A; --surface:#1C1F25; --surface-2:#23272E;
+    --ink:#ECE8E1; --muted:#9C978E; --line:#2E333B; --line-soft:#262A31;
+    --plan:#8EA4E8; --actual:#E99A62; --ok:#5FBE92; --warn:#D9B45F;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14161A; --surface:#1C1F25; --surface-2:#23272E;
+  --ink:#ECE8E1; --muted:#9C978E; --line:#2E333B; --line-soft:#262A31;
+  --plan:#8EA4E8; --actual:#E99A62; --ok:#5FBE92; --warn:#D9B45F;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14px;line-height:1.5;-webkit-text-size-adjust:100%;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+::selection{background:color-mix(in srgb,var(--plan) 28%,transparent);color:var(--ink)}
+h1,h2,h3{margin:0;text-wrap:balance}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--plan);outline-offset:2px}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+
+/* ---------- chrome ---------- */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top-in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font-weight:700;letter-spacing:-.01em;font-size:15px;display:flex;align-items:baseline;gap:7px}
+.brand i{font-style:normal;font-family:var(--font-num);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.tabs{margin-left:auto;display:flex;gap:2px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:3px}
+.tabs button{border:0;background:transparent;border-radius:999px;padding:5px 13px;font-size:13px;font-weight:500;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+main{max-width:1180px;margin:0 auto;padding:16px;padding-block:14px 120px}
+
+.daybar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.daybar .d{font-size:19px;font-weight:700;letter-spacing:-.02em}
+.daybar .dow{color:var(--muted);font-weight:500;font-size:14px}
+.nav{border:1px solid var(--line);background:var(--surface);border-radius:var(--radius);width:30px;height:30px;display:grid;place-items:center;line-height:1}
+.chip-btn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--muted)}
+.chip-btn:hover,.nav:hover{border-color:var(--plan);color:var(--plan)}
+.spacer{flex:1}
+
+.grid2{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+@media (min-width:900px){ :root{--slot:16px} .grid2{grid-template-columns:minmax(300px,.85fr) minmax(0,1.15fr);gap:22px;align-items:start} }
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.card-h{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line-soft)}
+.card-h h2{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-family:var(--font-num)}
+.card-b{padding:12px 13px}
+
+/* ---------- task ledger ---------- */
+.addrow{display:flex;gap:7px;padding:11px 13px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+.addrow input[type=text]{flex:1 1 130px;min-width:0;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;color:var(--ink)}
+select,input[type=time],input[type=text],textarea{font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:7px 8px}
+input[type=time]{font-family:var(--font-num)}
+.btn{border:1px solid transparent;background:var(--plan);color:#fff;border-radius:var(--radius);padding:8px 13px;font-weight:600;font-size:13px}
+.btn.ghost{background:var(--surface-2);border-color:var(--line);color:var(--ink);font-weight:500}
+.btn.ghost:hover{background:var(--surface);border-color:var(--muted)}
+.btn.danger{background:transparent;border-color:color-mix(in srgb,var(--actual) 50%,var(--line));color:var(--actual)}
+.btn.danger:hover{background:color-mix(in srgb,var(--actual) 12%,transparent)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+ul.tasks{list-style:none;margin:0;padding:0}
+ul.tasks li{display:flex;gap:9px;align-items:flex-start;padding:9px 13px;border-bottom:1px solid var(--line-soft)}
+ul.tasks li:last-child{border-bottom:0}
+.tick{flex:0 0 auto;width:20px;height:20px;margin-top:1px;border:1.5px solid var(--line);border-radius:5px;background:var(--surface);display:grid;place-items:center;padding:0;color:transparent;font-size:12px}
+.tick[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+.t-main{flex:1;min-width:0}
+.t-title{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font-size:14px;font-weight:500;word-break:break-word}
+li.done .t-title{color:var(--muted);text-decoration:line-through}
+.t-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;font-size:11px;color:var(--muted)}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:500;background:color-mix(in srgb,var(--c) 16%,transparent);border:1px solid color-mix(in srgb,var(--c) 34%,transparent);color:var(--ink)}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c)}
+.mini{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:11px}
+.mini.p{color:var(--plan)} .mini.a{color:var(--actual)}
+.go{flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:50%;width:28px;height:28px;display:grid;place-items:center;font-size:11px;color:var(--actual)}
+.go:hover{border-color:var(--actual)}
+.go[data-on="1"]{background:var(--actual);color:#fff;border-color:var(--actual)}
+.empty{padding:22px 14px;text-align:center;color:var(--muted);font-size:13px}
+.empty b{display:block;color:var(--ink);font-size:14px;margin-bottom:4px;font-weight:600}
+
+/* ---------- timeline ---------- */
+.tl-head{display:grid;grid-template-columns:46px 1fr 1fr;gap:6px;padding:9px 13px 7px;border-bottom:1px solid var(--line-soft);font-family:var(--font-num);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.tl-head .hp{color:var(--plan);display:flex;gap:6px;align-items:center} .tl-head .ha{color:var(--actual);display:flex;gap:6px;align-items:center}
+.tl-head button{margin-left:auto;border:1px solid var(--line);background:var(--surface);border-radius:5px;font-size:10px;padding:2px 6px;letter-spacing:0;text-transform:none;color:var(--muted);white-space:nowrap}
+.tl-head button:hover{border-color:var(--plan);color:var(--plan)}
+.tl-wrap{padding:0 13px 13px;overflow-y:auto;overflow-x:hidden;max-height:min(66vh,640px);overscroll-behavior:contain}
+.tl-body{position:relative;display:grid;grid-template-columns:46px 1fr 1fr;gap:6px;height:calc(var(--slots,108) * var(--slot));margin-top:8px}
+.gutter{position:relative}
+.gutter span{position:absolute;right:6px;transform:translateY(-50%);font-family:var(--font-num);font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.gutter span sup{color:var(--plan);font-size:8px}
+.track{position:relative;border:1px solid var(--line-soft);border-radius:6px;background-color:var(--surface-2);background-image:repeating-linear-gradient(to bottom,var(--line) 0 1px,transparent 1px calc(var(--slot)*6)),repeating-linear-gradient(to bottom,var(--line-soft) 0 1px,transparent 1px var(--slot));touch-action:pan-y}
+#trackPlan{--dc:var(--plan)} #trackAct{--dc:var(--actual)}
+.track{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.track.dragging{background-image:repeating-linear-gradient(to bottom,var(--line) 0 1px,transparent 1px calc(var(--slot)*3)),repeating-linear-gradient(to bottom,var(--line-soft) 0 1px,transparent 1px var(--slot));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dc) 45%,transparent)}
+.blk{position:absolute;left:2px;right:2px;touch-action:none;cursor:grab;border-radius:5px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);border-left:3px solid var(--c);background:color-mix(in srgb,var(--c) 20%,var(--surface));padding:1px 5px;overflow:hidden;text-align:left;font-size:11.5px;line-height:1.25;color:var(--ink)}
+.blk b{font-family:var(--font-num);font-weight:500;font-size:9.5px;color:var(--muted);display:block}
+.blk.tiny{padding:0 5px;display:flex;align-items:center}
+.blk.tiny b{display:none}
+.blk.live{border-style:dashed;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 22%,var(--surface)) 0 7px,color-mix(in srgb,var(--c) 11%,var(--surface)) 7px 14px)}
+.dragsel{position:absolute;left:2px;right:2px;border:1.5px dashed var(--dc,var(--plan));background:color-mix(in srgb,var(--dc,var(--plan)) 16%,transparent);border-radius:5px;pointer-events:none;z-index:3;display:flex;align-items:center;justify-content:center;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:10px;font-weight:500;color:var(--dc,var(--plan));overflow:hidden;white-space:nowrap}
+.blk.moving{z-index:5;cursor:grabbing;box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:.95}
+.blk.rt{border-left-style:dotted;border-left-width:4px}
+.blk .rtm{font-style:normal;font-size:9px;color:var(--muted);margin-right:3px;vertical-align:1px}
+/* ---------- weekday routines ---------- */
+.rt-row{border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px;background:var(--surface-2)}
+.rt-top{display:flex;gap:7px;align-items:center}
+.rt-top input[type=text]{flex:1;min-width:0;background:var(--surface)}
+.rt-top select{flex:0 0 104px;background:var(--surface)}
+.rt-days{display:flex;gap:4px}
+.rt-days button{flex:1;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 0;font-size:12px;color:var(--muted);min-width:0}
+.rt-days button[aria-pressed="true"]{background:var(--plan);border-color:var(--plan);color:#fff;font-weight:600}
+.rt-time{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--muted)}
+.rt-time input{flex:1;min-width:0;background:var(--surface)}
+.rt-note{font-size:11.5px;color:var(--muted);line-height:1.6;margin:10px 0 0}
+.nowline{position:absolute;left:46px;right:0;height:0;border-top:1.5px dashed color-mix(in srgb,var(--actual) 70%,transparent);pointer-events:none;z-index:4}
+.nowline::before{content:"";position:absolute;left:-4px;top:-3.5px;width:7px;height:7px;border-radius:50%;background:var(--actual)}
+.hint{font-size:11px;color:var(--muted);padding:7px 13px 0;text-align:center}
+/* phone: one track at a time, swiped left and right */
+.panes{display:contents}
+.pane-tabs{display:none}
+@media (max-width:899px){
+  .tl-head{display:none}
+  .pane-tabs{display:flex;gap:6px;align-items:center;padding:10px 13px 0}
+  .pane-tabs .pt{flex:1;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:6px 0;font-size:12.5px;font-weight:600;color:var(--muted)}
+  .pane-tabs .pt[aria-selected="true"]{background:var(--surface)}
+  .pane-tabs .pt[data-i="0"][aria-selected="true"]{color:var(--plan);border-color:var(--plan)}
+  .pane-tabs .pt[data-i="1"][aria-selected="true"]{color:var(--actual);border-color:var(--actual)}
+  .pane-tabs .js-manual{flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:999px;font-size:11px;padding:5px 10px;color:var(--muted);white-space:nowrap}
+  .tl-body{grid-template-columns:46px 1fr}
+  /* clip, not hidden: `clip` is no scroll container, so a vertical drag still scrolls the timeline */
+  .panes{display:flex;grid-column:2;gap:8px;overflow:hidden;overflow:clip}
+  .panes>.track{flex:0 0 100%;transform:translateX(var(--pane-x,0px));transition:transform .22s ease}
+}
+@media (prefers-reduced-motion:reduce){.panes>.track{transition:none}}
+
+/* ---------- stats ---------- */
+.stat-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px}
+.stat .k{font-family:var(--font-num);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.stat .v{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:clamp(20px,5.4vw,27px);font-weight:600;letter-spacing:-.02em;margin-top:2px;word-break:keep-all}
+.stat .s{font-size:11.5px;color:var(--muted)}
+.bar{height:6px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;border-radius:999px;background:var(--c,var(--ok))}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;align-items:end;height:118px;margin-top:4px}
+.week .col{display:flex;flex-direction:column;justify-content:flex-end;height:100%;gap:4px;text-align:center}
+.week .stack{position:relative;height:100%;display:flex;align-items:flex-end;gap:2px;justify-content:center}
+.week .b{width:9px;border-radius:3px 3px 0 0;min-height:2px}
+.week .b.p{background:color-mix(in srgb,var(--plan) 40%,transparent);border:1px solid color-mix(in srgb,var(--plan) 60%,transparent)}
+.week .b.a{background:var(--actual)}
+.week .lab{font-family:var(--font-num);font-size:10px;color:var(--muted)}
+.week .pct{font-family:var(--font-num);font-size:10px;color:var(--ok)}
+.rows{display:grid;gap:7px;margin-top:4px}
+.row2{display:grid;grid-template-columns:86px 1fr 62px;gap:9px;align-items:center;font-size:12.5px}
+.row2 .n{font-family:var(--font-num);font-variant-numeric:tabular-nums;text-align:right;color:var(--muted);font-size:11.5px}
+.heat{display:grid;grid-template-columns:repeat(15,1fr);gap:4px;margin-top:4px}
+.heat i{aspect-ratio:1;border-radius:3px;background:var(--surface-2);border:1px solid var(--line-soft)}
+.legend{display:flex;gap:12px;font-size:11px;color:var(--muted);margin-top:9px;flex-wrap:wrap}
+.legend b{display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:-1px;margin-right:4px}
+.sec-t{font-size:13px;font-weight:600;margin:20px 0 8px}
+
+/* ---------- settings ---------- */
+.set-row{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line-soft)}
+.set-row:last-child{border-bottom:0}
+.set-row .lab{flex:0 0 112px;font-size:12.5px;color:var(--muted)}
+.taglist{display:grid;gap:7px}
+.tagedit{display:flex;gap:7px;align-items:center}
+.tagedit input[type=color]{width:34px;height:32px;padding:2px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2)}
+.tagedit input[type=text]{flex:1;min-width:0}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:var(--radius);width:32px;height:32px;display:grid;place-items:center;color:var(--muted);flex:0 0 auto}
+.iconbtn:hover{color:var(--actual);border-color:var(--actual)}
+
+/* ---------- run bar ---------- */
+.runbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--surface);border-top:1px solid var(--line);padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 20px rgba(0,0,0,.07)}
+.runbar-in{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:11px}
+.pulse{width:9px;height:9px;border-radius:50%;background:var(--actual);flex:0 0 auto;animation:p 1.8s ease-in-out infinite}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+.runbar .t{flex:1;min-width:0}
+.runbar .t strong{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.runbar .t span{font-size:11.5px;color:var(--muted);font-family:var(--font-num)}
+.runbar .el{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:19px;font-weight:600;white-space:nowrap}
+.runbar.paused .el{font-size:13px;color:var(--muted);font-weight:500}
+.runbar.paused .pulse{animation:none;background:var(--muted)}
+.runbar #runPause{padding-left:11px;padding-right:11px}
+@media (max-width:420px){.runbar-in{gap:7px}.runbar .btn{padding:8px 10px}}
+
+/* ---------- dialog ---------- */
+.overlay{position:fixed;inset:0;z-index:60;background:rgba(10,12,16,.46);display:flex;align-items:flex-end;justify-content:center;padding:0}
+@media (min-width:620px){.overlay{align-items:center;padding:20px}}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:14px 14px 0 0;width:100%;max-width:440px;max-height:88vh;overflow:auto;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+@media (min-width:620px){.sheet{border-radius:14px;padding-bottom:16px}}
+.sheet h3{font-size:15px;margin-bottom:12px}
+.fld{margin-bottom:11px}
+.fld label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:4px}
+.fld input[type=text],.fld select,.fld textarea{width:100%}
+.times{display:flex;align-items:center;gap:8px}
+.times input{flex:1;min-width:0}
+.sheet-foot{display:flex;gap:8px;margin-top:17px;padding-top:13px;border-top:1px solid var(--line-soft)}
+.sheet-foot .btn{flex:1}
+.sheet-foot .del{flex:0 0 auto;padding-left:13px;padding-right:13px}
+.sheet-foot .go-save{flex:1.5}
+.notice{background:color-mix(in srgb,var(--warn) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--warn) 38%,transparent);border-radius:9px;padding:9px 11px;font-size:12.5px;margin-bottom:12px}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;justify-content:center}
+.login{position:fixed;inset:0;z-index:100;background:var(--bg);display:grid;place-items:center;padding:20px}
+.login[hidden]{display:none}
+.login form{width:100%;max-width:340px;display:grid;gap:10px}
+.login h1{font-size:20px;margin:0 0 4px}
+.login p{margin:0 0 6px;color:var(--muted);font-size:12.5px}
+.login input{font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:10px;width:100%;box-sizing:border-box}
+.login .err{color:var(--actual);font-size:12.5px;min-height:1.2em}
+</style>
+
+<div class="login" id="login" hidden>
+  <form id="loginForm">
+    <h1>계획과 실제</h1>
+    <p>본인 계정으로 로그인하면 PC와 휴대폰이 같은 기록을 공유합니다.</p>
+    <input type="email" id="lgEmail" placeholder="이메일" autocomplete="username" required>
+    <input type="password" id="lgPw" placeholder="비밀번호" autocomplete="current-password" required>
+    <div class="err" id="lgErr" role="alert"></div>
+    <button class="btn" type="submit" id="lgBtn">로그인</button>
+  </form>
+</div>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">계획과 실제 <i>plan / actual</i></div>
+    <nav class="tabs" role="tablist">
+      <button id="tabToday" role="tab" aria-selected="true">오늘</button>
+      <button id="tabStats" role="tab" aria-selected="false">통계</button>
+      <button id="tabSet" role="tab" aria-selected="false">설정</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div id="syncNote" class="notice" hidden></div>
+
+  <section id="viewToday">
+    <div class="daybar">
+      <button class="nav" id="prevDay" title="이전 날">‹</button>
+      <button class="nav" id="nextDay" title="다음 날">›</button>
+      <div class="d" id="dateLabel">—</div>
+      <div class="dow" id="dowLabel"></div>
+      <div class="spacer"></div>
+      <button class="chip-btn" id="fillBtn" hidden title="지나간 계획을 실제 기록으로 한 번에 옮깁니다">계획대로 채우기</button>
+      <button class="chip-btn" id="goToday">오늘</button>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <div class="card">
+          <div class="card-h">
+            <h2>Today's goal</h2>
+            <div class="spacer"></div>
+            <span class="mini" id="taskCount" style="color:var(--muted)"></span>
+            <button class="chip-btn" id="carryBtn" title="어제 못 끝낸 할일 가져오기">어제 미완료</button>
+          </div>
+          <div class="addrow">
+            <input type="text" id="newTask" placeholder="해야할 일 추가" maxlength="90">
+            <select id="newTag"></select>
+            <button class="btn" id="addTask">추가</button>
+          </div>
+          <ul class="tasks" id="taskList"></ul>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="tl-head">
+            <span class="num">시각</span>
+            <span class="hp">계획</span>
+            <span class="ha">실제 <button class="js-manual">수기 추가</button></span>
+          </div>
+          <div class="pane-tabs" id="paneTabs">
+            <button class="pt" data-i="0" aria-selected="true">계획</button>
+            <button class="pt" data-i="1" aria-selected="false">실제</button>
+            <button class="js-manual" id="manualM" hidden>수기 추가</button>
+          </div>
+          <div class="tl-wrap" id="tlWrap">
+            <div class="tl-body" id="tlBody">
+              <div class="gutter" id="gutter"></div>
+              <div class="panes" id="panes">
+                <div class="track" id="trackPlan" data-kind="plan"></div>
+                <div class="track" id="trackAct" data-kind="log"></div>
+              </div>
+              <div class="nowline" id="nowLine" hidden></div>
+            </div>
+          </div>
+          <div class="hint" id="tlHint"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="viewStats" hidden></section>
+  <section id="viewSet" hidden></section>
+</main>
+
+<div class="runbar" id="runBar" hidden>
+  <div class="runbar-in">
+    <span class="pulse"></span>
+    <div class="t"><strong id="runTitle">—</strong><span id="runSince"></span></div>
+    <div class="el" id="runElapsed">0:00</div>
+    <button class="btn ghost" id="runPause">중지</button>
+    <button class="btn" id="runStop" style="background:var(--actual)">종료</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+
+<script>
+/* ============================== helpers ============================== */
+const $ = (s) => document.querySelector(s);
+const pad = (n) => String(n).padStart(2, "0");
+const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function keyOf(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+function parseKey(k) { const p = k.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+function shiftKey(k, n) { const d = parseKey(k); d.setDate(d.getDate() + n); return keyOf(d); }
+function hhmm(m) { m = Math.round(m); const h = Math.floor(m / 60) % 24; return pad(h) + ":" + pad(((m % 60) + 60) % 60); }
+function dur(m) {
+  m = Math.round(m); if (m <= 0) return "0분";
+  const h = Math.floor(m / 60), x = m % 60;
+  return h ? (x ? h + "시간 " + x + "분" : h + "시간") : x + "분";
+}
+function roundTo(m, step) { return Math.round(m / step) * step; }
+function nowMin() { const d = new Date(); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function toTimeVal(m) { return hhmm(m); }
+function fromTimeVal(v, ref) {
+  if (!v) return null;
+  const p = v.split(":").map(Number); let m = p[0] * 60 + p[1];
+  if (ref != null && m <= ref && S.set.dayEnd > 1440) m += 1440;
+  return m;
+}
+const DEFAULT_TAGS = [
+  { id: "study", name: "학업", color: "#3F5BA9" },
+  { id: "extra", name: "대외활동", color: "#2F7A57" },
+  { id: "career", name: "취업", color: "#B4891A" },
+  { id: "fit", name: "운동", color: "#C2622A" },
+  { id: "etc", name: "기타", color: "#7A7480" }
+];
+const DEFAULT_SET = { tags: DEFAULT_TAGS, dayStart: 360, dayEnd: 1440 };
+
+/* ============================== store ============================== */
+/* One row per day at days/<YYYY-MM-DD>, config at settings/app, live timer at state/running.
+   Falls back to this browser's local storage when the artifact db is unavailable. */
+let DB = null, canWrite = true, readOnly = false;
+
+const LS = {
+  read(p) { try { const r = localStorage.getItem("pa:" + p); return r ? JSON.parse(r) : null; } catch (e) { return null; } },
+  write(p, v) { try { localStorage.setItem("pa:" + p, JSON.stringify(v)); } catch (e) { } },
+  keys() { const o = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith("pa:days/")) o.push(k.slice(8)); } } catch (e) { } return o; }
+};
+
+const subs = new Map();   // path -> callback
+const pend = new Map();   // path -> {timer, data, inflight}
+const mine = new Map();   // path -> timestamp of this page's last write
+
+/* A snapshot that left the server before our own write must not undo it. */
+function stale(path, d) {
+  if (pend.has(path)) return true;
+  const t = mine.get(path);
+  if (!t) return false;
+  return !d || !d._t || d._t < t;
+}
+function watch(path, cb) {
+  subs.set(path, cb);
+  if (DB) {
+    return DB.doc(path).onSnapshot(
+      (s) => { const d = s.exists ? s.data() : null; if (stale(path, d)) return; cb(d); },
+      (e) => { if (e && (e.code === "revoked" || e.code === "not_granted" || e.code === "permission-denied")) setReadOnly("이 계정에는 접근 권한이 없습니다. 보기만 가능합니다."); }
+    );
+  }
+  cb(LS.read(path));
+  return () => subs.delete(path);
+}
+function save(path, data) {
+  if (readOnly) return;
+  data._t = Date.now();
+  mine.set(path, data._t);
+  const e = pend.get(path) || {};
+  e.data = data; clearTimeout(e.timer);
+  e.timer = setTimeout(() => flush(path), 350);
+  pend.set(path, e);
+  if (!DB) LS.write(path, data);
+}
+async function flush(path) {
+  const e = pend.get(path); if (!e) return;
+  if (e.inflight) { e.timer = setTimeout(() => flush(path), 250); return; }
+  const data = e.data; e.inflight = true;
+  try {
+    if (DB) await DB.doc(path).set(data); else LS.write(path, data);
+  } catch (err) {
+    if (err && (err.code === "invalid_argument" || err.code === "permission-denied")) setReadOnly("저장 권한이 없어 변경 내용이 기록되지 않았습니다.");
+    else if (err && err.code === "quota_exceeded") note("저장 공간이 가득 찼습니다. 오래된 날짜를 정리해 주세요.");
+  } finally {
+    e.inflight = false;
+    if (pend.get(path) === e && e.data === data) pend.delete(path);
+  }
+}
+async function readOnce(path) {
+  if (!DB) return LS.read(path);
+  try { const s = await DB.doc(path).get(); return s.exists ? s.data() : null; } catch (e) { return null; }
+}
+async function readDays(limit) {
+  if (!DB) return LS.keys().map((k) => LS.read("days/" + k)).filter(Boolean);
+  try {
+    const s = await DB.collection("days").orderBy("date", "desc").limit(limit || 70).get();
+    return s.docs.map((d) => d.data()).filter(Boolean);
+  } catch (e) { return []; }
+}
+/* fb.js calls window.__fbResolve(api); if it never loads (opened as a plain file), fall back to local mode. */
+let FB = null;
+const fbReady = new Promise((res) => {
+  window.__fbResolve = res; setTimeout(() => res(null), 8000);
+  addEventListener("DOMContentLoaded", () => { if (!document.querySelector('script[src*="fb.js"]')) res(null); });
+});
+function askLogin(fb) {
+  return new Promise((resolve) => {
+    const box = $("#login"), form = $("#loginForm"), err = $("#lgErr"), btn = $("#lgBtn");
+    box.hidden = false;
+    form.onsubmit = async (e) => {
+      e.preventDefault(); err.textContent = ""; btn.disabled = true;
+      try {
+        const c = await fb.signIn($("#lgEmail").value.trim(), $("#lgPw").value);
+        box.hidden = true; resolve(c.user);
+      } catch (x) {
+        const code = (x && x.code) || "";
+        err.textContent = /network/.test(code) ? "네트워크에 연결할 수 없습니다. 연결 후 다시 시도해 주세요."
+          : /too-many/.test(code) ? "시도가 너무 많습니다. 잠시 후 다시 해 주세요."
+          : "이메일 또는 비밀번호가 맞지 않습니다.";
+      } finally { btn.disabled = false; }
+    };
+  });
+}
+function exportAll() {
+  readDays(100000).then(async (days) => {
+    const out = { app: "plan-actual", v: 1, exportedAt: new Date().toISOString(), days: days, settings: await readOnce("settings/app"), routines: await readOnce("settings/routines") };
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: "application/json" }));
+    a.download = "plan-actual-" + keyOf(new Date()) + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  });
+}
+function importAll(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const o = JSON.parse(r.result);
+      if (!o || o.app !== "plan-actual" || !Array.isArray(o.days)) throw new Error("bad");
+      if (!confirm("가져오면 같은 날짜의 기록은 파일 내용으로 덮어써집니다. 계속할까요?")) return;
+      o.days.forEach((d) => { if (d && d.date) save("days/" + d.date, d); });
+      if (o.settings) save("settings/app", o.settings);
+      if (o.routines) save("settings/routines", o.routines);
+      setTimeout(() => location.reload(), 1500);
+    } catch (e) { alert("가져올 수 없는 파일입니다."); }
+  };
+  r.readAsText(file);
+}
+function setReadOnly(msg) { readOnly = true; note(msg); render(); }
+function note(msg) { const n = $("#syncNote"); n.textContent = msg; n.hidden = false; }
+
+/* ============================== state ============================== */
+const S = {
+  view: "today",
+  dateKey: keyOf(new Date()),
+  set: JSON.parse(JSON.stringify(DEFAULT_SET)),
+  day: null,
+  running: null,
+  unsubDay: null,
+  needScroll: true,
+  rt: { items: [] },
+  pane: 0
+};
+function emptyDay(k) { return { date: k, tasks: [], plans: [], logs: [], rApplied: [] }; }
+
+/* ============================== weekday routines ==============================
+   A routine is a repeating entry (timetable, shift). It writes itself into the PLAN
+   column of today and later days, once per day, and never into 실제. Deleting a day's
+   block keeps it gone for that day; editing the routine re-places it on the open day. */
+function saveRt() { save("settings/routines", { items: S.rt.items }); }
+function applyRoutines() {
+  if (!S.dayLoaded) return;        // never write into a day whose record hasn't arrived yet
+  if (readOnly || !S.rt || !Array.isArray(S.rt.items) || !S.rt.items.length) return;
+  if (S.dateKey < keyOf(new Date())) return;            // past days keep the history they had
+  const d = day();
+  if (!Array.isArray(d.rApplied)) d.rApplied = [];
+  const dow = parseKey(S.dateKey).getDay();
+  let added = 0;
+  S.rt.items.forEach((r) => {
+    if (!r || r.off || !Array.isArray(r.days) || r.days.indexOf(dow) < 0) return;
+    if (d.rApplied.indexOf(r.id) >= 0) return;
+    if (!(r.end > r.start)) return;
+    d.plans.push({ id: uid(), taskId: null, label: r.title || "루틴", tagId: r.tagId, start: r.start, end: r.end, rid: r.id });
+    d.rApplied.push(r.id); added++;
+  });
+  if (added) { saveDay(); render(); }
+}
+/* Put the open day's copy of one routine back in step with the routine itself. */
+function refreshRoutine(rid) {
+  const d = day();
+  d.plans = d.plans.filter((p) => p.rid !== rid);
+  d.rApplied = (d.rApplied || []).filter((x) => x !== rid);
+  saveDay(); applyRoutines(); render();
+}
+function day() { if (!S.day || S.day.date !== S.dateKey) S.day = emptyDay(S.dateKey); return S.day; }
+function saveDay() { const d = day(); d.updatedAt = Date.now(); save("days/" + d.date, d); }
+function tag(id) { return S.set.tags.find((t) => t.id === id) || { id: "etc", name: "기타", color: "#7A7480" }; }
+function task(id) { return day().tasks.find((t) => t.id === id) || null; }
+function labelOf(o) { const t = o.taskId ? task(o.taskId) : null; return t ? t.title : (o.label || "(제목 없음)"); }
+function colorOf(o) { const t = o.taskId ? task(o.taskId) : null; return tag(t ? t.tagId : o.tagId).color; }
+function slots() { return Math.max(6, Math.round((S.set.dayEnd - S.set.dayStart) / 10)); }
+
+/* ============================== boot ============================== */
+render();
+(async function boot() {
+  /* Firebase is attached by fb.js (installed build only). Without it the app keeps
+     everything in this browser's own storage. */
+  const fb = await fbReady;
+  if (fb) {
+    FB = fb;
+    let user = null;
+    try { user = await fb.waitUser(); } catch (e) { }
+    if (!user) user = await askLogin(fb);
+    DB = fb.makeDB(user.uid);
+    S.email = user.email || "";
+  } else {
+    note("이 기기 브라우저에만 저장됩니다. 로그인 연결이 켜진 설치 버전에서 열면 PC·모바일이 같은 기록을 공유합니다.");
+  }
+
+  watch("settings/app", (d) => {
+    S.set = Object.assign(JSON.parse(JSON.stringify(DEFAULT_SET)), d || {});
+    if (!Array.isArray(S.set.tags) || !S.set.tags.length) S.set.tags = JSON.parse(JSON.stringify(DEFAULT_TAGS));
+    S.set.dayStart = clamp(Math.round(S.set.dayStart / 60) * 60, 0, 780);
+    S.set.dayEnd = clamp(Math.round(S.set.dayEnd / 60) * 60, S.set.dayStart + 360, 1680);
+    render();
+  });
+  watch("settings/routines", (d) => {
+    S.rt = { items: Array.isArray(d && d.items) ? d.items : [] };
+    applyRoutines(); render();
+  });
+  watch("state/running", (d) => { S.running = d && (d.startMs || d.paused) ? d : null; render(); });
+  openDay(S.dateKey);
+  setInterval(tick, 1000);
+  setInterval(() => { if (S.view === "today") { drawNow(); drawTimeline(); } }, 60000);
+})();
+
+function openDay(k) {
+  S.dateKey = k;
+  S.needScroll = true;
+  S.dayLoaded = false;
+  if (S.unsubDay) { try { S.unsubDay(); } catch (e) { } S.unsubDay = null; }
+  S.day = emptyDay(k);
+  render();
+  S.unsubDay = watch("days/" + k, (d) => {
+    S.day = d && d.date ? Object.assign(emptyDay(k), d) : emptyDay(k);
+    if (!Array.isArray(S.day.tasks)) S.day.tasks = [];
+    if (!Array.isArray(S.day.plans)) S.day.plans = [];
+    if (!Array.isArray(S.day.logs)) S.day.logs = [];
+    if (!Array.isArray(S.day.rApplied)) S.day.rApplied = [];
+    S.dayLoaded = true;
+    applyRoutines();
+    render();
+  });
+}
+
+/* ============================== render ============================== */
+function render() {
+  $("#viewToday").hidden = S.view !== "today";
+  $("#viewStats").hidden = S.view !== "stats";
+  $("#viewSet").hidden = S.view !== "set";
+  $("#tabToday").setAttribute("aria-selected", S.view === "today");
+  $("#tabStats").setAttribute("aria-selected", S.view === "stats");
+  $("#tabSet").setAttribute("aria-selected", S.view === "set");
+  if (S.view === "today") { drawDate(); drawTagSelect(); drawTasks(); drawTimeline(); drawNow(); }
+  if (S.view === "set") drawSettings();
+  drawRun();
+}
+
+function drawDate() {
+  const d = parseKey(S.dateKey);
+  $("#dateLabel").textContent = (d.getMonth() + 1) + "월 " + d.getDate() + "일";
+  const isT = S.dateKey === keyOf(new Date());
+  $("#dowLabel").textContent = DOW[d.getDay()] + "요일" + (isT ? " · 오늘" : "");
+  $("#goToday").hidden = isT;
+  const f = fillable().length;
+  $("#fillBtn").hidden = !f;
+  $("#fillBtn").textContent = "계획대로 채우기 " + f;
+}
+function drawTagSelect() {
+  const sel = $("#newTag"), cur = sel.value;
+  sel.innerHTML = S.set.tags.map((t) => '<option value="' + esc(t.id) + '">' + esc(t.name) + "</option>").join("");
+  if (cur && S.set.tags.some((t) => t.id === cur)) sel.value = cur;
+}
+
+function drawTasks() {
+  const d = day(), ul = $("#taskList");
+  const done = d.tasks.filter((t) => t.done).length;
+  $("#taskCount").textContent = d.tasks.length ? done + "/" + d.tasks.length : "";
+  $("#addTask").disabled = readOnly; $("#newTask").disabled = readOnly; $("#carryBtn").hidden = readOnly;
+
+  if (!d.tasks.length) {
+    ul.innerHTML = '<li style="display:block"><div class="empty"><b>오늘 할 일을 적어보세요</b>' +
+      "태그를 붙여 추가하면 아래 격자에 계획을 올릴 수 있어요." +
+      (readOnly ? "" : '<div class="quick"><button class="chip-btn" data-q="carry">어제 미완료 가져오기</button><button class="chip-btn" data-q="sample">샘플로 둘러보기</button></div>') +
+      "</div></li>";
+    ul.querySelectorAll("[data-q]").forEach((b) => b.onclick = () => b.dataset.q === "carry" ? carryOver() : fillSample());
+    return;
+  }
+  ul.innerHTML = d.tasks.map((t) => {
+    const g = tag(t.tagId);
+    const p = d.plans.filter((x) => x.taskId === t.id).reduce((s, x) => s + (x.end - x.start), 0);
+    const a = d.logs.filter((x) => x.taskId === t.id).reduce((s, x) => s + (x.end - x.start), 0);
+    const run = S.running && S.running.taskId === t.id;
+    const on = run && !S.running.paused;
+    return '<li class="' + (t.done ? "done" : "") + '" data-id="' + t.id + '">' +
+      '<button class="tick" data-act="tick" aria-pressed="' + (!!t.done) + '" aria-label="완료 표시">✓</button>' +
+      '<div class="t-main"><button class="t-title" data-act="edit">' + esc(t.title) + "</button>" +
+      '<div class="t-meta"><span class="tag" style="--c:' + esc(g.color) + '">' + esc(g.name) + "</span>" +
+      (p ? '<span class="mini p">계획 ' + dur(p) + "</span>" : "") +
+      (a ? '<span class="mini a">실제 ' + dur(a) + "</span>" : "") +
+      "</div></div>" +
+      (readOnly ? "" : '<button class="go" data-act="run" data-on="' + (on ? 1 : 0) + '" data-paused="' + (run && !on ? 1 : 0) + '" title="' + (on ? "종료" : run ? "이어서" : "지금 시작") + '">' + (on ? "■" : "▶") + "</button>") +
+      "</li>";
+  }).join("");
+}
+
+function drawTimeline() {
+  const d = day(), st = S.set.dayStart;
+  $("#tlBody").style.setProperty("--slots", slots());
+  const g = $("#gutter"); let gh = "";
+  for (let m = st; m <= S.set.dayEnd; m += 60) {
+    const top = ((m - st) / 10) * 100 / slots();
+    gh += '<span style="top:' + top + '%">' + pad(Math.floor(m / 60) % 24) + (m >= 1440 ? "<sup>+1</sup>" : "") + "</span>";
+  }
+  g.innerHTML = gh;
+  $("#trackPlan").innerHTML = d.plans.slice().sort((a, b) => a.start - b.start).map((p) => blockHTML(p, "plan")).join("");
+  let live = "";
+  if (S.running && !S.running.paused && S.running.dateKey === d.date) {
+    const s = S.running.startMin, e = Math.max(s + 5, nowMin());
+    live = blockHTML({ id: "__live", taskId: S.running.taskId, label: S.running.label, tagId: S.running.tagId, start: s, end: e }, "log", true);
+  }
+  $("#trackAct").innerHTML = d.logs.slice().sort((a, b) => a.start - b.start).map((l) => blockHTML(l, "log")).join("") + live;
+  document.querySelectorAll(".js-manual").forEach((b) => { b.hidden = readOnly || (b.id === "manualM" && S.pane !== 1); });
+  $("#tlHint").innerHTML = readOnly ? "보기 전용입니다."
+    : "빈 칸을 끌어 만들기 · 블록을 끌어 옮기기 · 30분 단위<br>휴대폰에서는 길게 누른 뒤 끄세요 · 블록을 짧게 누르면 10분 단위로 수정";
+  if (S.needScroll) requestAnimationFrame(() => { if (scrollToFocus()) S.needScroll = false; });
+}
+function scrollToFocus() {
+  const wrap = $("#tlWrap"), body = $("#tlBody");
+  if (!wrap || !body || !body.offsetHeight) return false;
+  const d = day(); let m;
+  if (S.dateKey === keyOf(new Date())) m = nowMin();
+  else { const all = d.plans.concat(d.logs); m = all.length ? Math.min.apply(null, all.map((x) => x.start)) : S.set.dayStart + 180; }
+  const y = ((clamp(m, S.set.dayStart, S.set.dayEnd) - S.set.dayStart) / 10) * (body.offsetHeight / slots());
+  wrap.scrollTop = Math.max(0, y - wrap.clientHeight * 0.35);
+  return true;
+}
+function blockHTML(o, kind, isLive) {
+  const st = S.set.dayStart, span = slots();
+  const a = clamp(o.start, st, S.set.dayEnd), b = clamp(o.end, st, S.set.dayEnd);
+  if (b <= a) return "";
+  const top = ((a - st) / 10) * 100 / span, h = ((b - a) / 10) * 100 / span;
+  const mins = b - a, tiny = mins < 25;
+  return '<button class="blk' + (tiny ? " tiny" : "") + (isLive ? " live" : "") + (o.rid ? " rt" : "") + '" data-kind="' + kind + '" data-id="' + esc(o.id) +
+    '" style="top:' + top + "%;height:calc(" + h + '% - 2px);--c:' + esc(colorOf(o)) + '">' +
+    "<b>" + hhmm(a) + "–" + hhmm(b) + "</b><span>" + (o.rid ? '<i class="rtm">↻</i>' : "") + esc(labelOf(o)) + "</span></button>";
+}
+function drawNow() {
+  const el = $("#nowLine"), isT = S.dateKey === keyOf(new Date());
+  const m = nowMin() + (nowMin() < S.set.dayStart && S.set.dayEnd > 1440 ? 1440 : 0);
+  if (!isT || m < S.set.dayStart || m > S.set.dayEnd) { el.hidden = true; return; }
+  el.hidden = false;
+  el.style.top = (((m - S.set.dayStart) / 10) * 100 / slots()) + "%";
+}
+/* Total time of this sitting: everything banked before the last 중지, plus the stretch running now. */
+function runSeconds(r) {
+  if (!r) return 0;
+  const live = r.paused || !r.startMs ? 0 : Date.now() - r.startMs;
+  return Math.max(0, Math.floor(((r.accMs || 0) + live) / 1000));
+}
+function drawRun() {
+  const b = $("#runBar");
+  if (!S.running) { b.hidden = true; return; }
+  b.hidden = false;
+  const paused = !!S.running.paused;
+  b.classList.toggle("paused", paused);
+  $("#runTitle").textContent = S.running.label || "진행 중";
+  $("#runSince").textContent = paused
+    ? "중지됨 · 이어서를 누르면 이어서 잽니다"
+    : hhmm(S.running.startMin) + " 시작 · " + tag(S.running.tagId).name;
+  const pb = $("#runPause");
+  pb.textContent = paused ? "이어서" : "중지";
+  pb.className = paused ? "btn" : "btn ghost";
+  pb.style.background = paused ? "var(--ok)" : "";
+  pb.style.color = paused ? "#fff" : "";
+  tick();
+}
+function tick() {
+  if (!S.running) return;
+  const sec = runSeconds(S.running);
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  $("#runElapsed").textContent = (h ? h + ":" + pad(m) : m + ":" + pad(s)) + (h ? ":" + pad(s) : "");
+}
+
+/* ============================== task actions ============================== */
+$("#addTask").onclick = addTask;
+$("#newTask").onkeydown = (e) => { if (e.key === "Enter") addTask(); };
+function addTask() {
+  const i = $("#newTask"), t = i.value.trim(); if (!t) return;
+  day().tasks.push({ id: uid(), title: t, tagId: $("#newTag").value || S.set.tags[0].id, done: false });
+  i.value = ""; saveDay(); render(); i.focus();
+}
+$("#taskList").onclick = (e) => {
+  const btn = e.target.closest("[data-act]"); if (!btn) return;
+  const id = btn.closest("li").dataset.id, t = task(id); if (!t) return;
+  const act = btn.dataset.act;
+  if (act === "tick") { t.done = !t.done; saveDay(); render(); }
+  if (act === "edit") taskSheet(t);
+  if (act === "run") {
+    if (btn.dataset.on === "1") stopRun();
+    else if (btn.dataset.paused === "1") pauseRun();   // resume this task
+    else startRun(t);
+  }
+};
+$("#carryBtn").onclick = carryOver;
+async function carryOver() {
+  const prev = await readOnce("days/" + shiftKey(S.dateKey, -1));
+  const left = ((prev && prev.tasks) || []).filter((t) => !t.done);
+  if (!left.length) { note("어제 남은 할일이 없습니다."); return; }
+  const have = new Set(day().tasks.map((t) => t.title));
+  let n = 0;
+  left.forEach((t) => { if (!have.has(t.title)) { day().tasks.push({ id: uid(), title: t.title, tagId: t.tagId, done: false }); n++; } });
+  saveDay(); render(); note(n ? n + "건을 가져왔습니다." : "이미 모두 있습니다.");
+}
+function fillSample() {
+  const d = day(), ids = [uid(), uid(), uid()];
+  d.tasks = [
+    { id: ids[0], title: "자료구조 과제 (예시)", tagId: "study", done: true },
+    { id: ids[1], title: "지원서 자기소개서 1문항 (예시)", tagId: "career", done: false },
+    { id: ids[2], title: "헬스 45분 (예시)", tagId: "fit", done: true }
+  ];
+  d.plans = [
+    { id: uid(), taskId: ids[0], start: 600, end: 720 },
+    { id: uid(), taskId: ids[1], start: 840, end: 930 },
+    { id: uid(), taskId: ids[2], start: 1140, end: 1200 }
+  ];
+  d.logs = [
+    { id: uid(), taskId: ids[0], start: 620, end: 745, note: "" },
+    { id: uid(), taskId: ids[1], start: 860, end: 900, note: "집중 끊김" },
+    { id: uid(), taskId: ids[2], start: 1150, end: 1195, note: "" }
+  ];
+  saveDay(); render();
+}
+
+/* ============================== timer ============================== */
+function beginRun(taskId, label, tagId) {
+  if (readOnly) return;
+  if (S.running) { stopRun(true); }
+  const r = { dateKey: keyOf(new Date()), taskId: taskId || null, label: label || "기록 중", tagId: tagId || S.set.tags[0].id, startMs: Date.now(), startMin: Math.round(nowMin()), accMs: 0 };
+  S.running = r; save("state/running", r); render();
+}
+function startRun(t) { beginRun(t ? t.id : null, t ? t.title : "기록 중", t ? t.tagId : null); }
+
+/* 계획 → 실제: copy one planned block, or every past block not recorded yet. */
+function logFromPlan(p) {
+  day().logs.push({ id: uid(), taskId: p.taskId || null, label: p.taskId ? "" : (p.label || "기록"), tagId: p.taskId ? (task(p.taskId) || {}).tagId : p.tagId, start: p.start, end: p.end, note: "" });
+}
+function fillable() {
+  if (readOnly || S.dateKey !== keyOf(new Date())) return [];
+  const d = day(), now = nowMin();
+  return d.plans.filter((p) => p.end <= now && !d.logs.some((l) =>
+    Math.min(p.end, l.end) - Math.max(p.start, l.start) > 0 &&
+    (p.taskId ? l.taskId === p.taskId : (l.label || "") === (p.label || ""))));
+}
+function fillFromPlan() {
+  const list = fillable();
+  if (!list.length) { note("옮길 계획이 없습니다."); return; }
+  list.forEach(logFromPlan);
+  saveDay(); render();
+  note(list.length + "건을 계획대로 실제 기록에 옮겼습니다. 틀린 건 블록을 눌러 고치세요.");
+}
+$("#fillBtn").onclick = fillFromPlan;
+/* Writes the stretch that has been running since startMin as one record. */
+async function commitSegment(r) {
+  if (!r || r.paused || !r.startMs) return null;
+  const end = r.dateKey === keyOf(new Date()) ? Math.round(nowMin()) : S.set.dayEnd;
+  const log = { id: uid(), taskId: r.taskId, label: r.label, tagId: r.tagId, start: r.startMin, end: Math.max(r.startMin + 1, end > r.startMin ? end : r.startMin + 1), note: "" };
+  if (r.dateKey === S.dateKey) { day().logs.push(log); saveDay(); }
+  else {
+    const d = Object.assign(emptyDay(r.dateKey), (await readOnce("days/" + r.dateKey)) || {});
+    if (!Array.isArray(d.logs)) d.logs = [];
+    d.logs.push(log); d.date = r.dateKey; save("days/" + r.dateKey, d);
+  }
+  return log;
+}
+async function stopRun(silent) {
+  const r = S.running; if (!r) return;
+  S.running = null; save("state/running", {});
+  const log = await commitSegment(r);
+  render();
+  if (!silent && log) note(dur(log.end - log.start) + " 기록됐습니다 · " + hhmm(log.start) + "–" + hhmm(log.end));
+}
+/* 중지: keep the task on the bar, bank what has run so far. 이어서 starts a new stretch. */
+async function pauseRun() {
+  const r = S.running; if (!r) return;
+  if (r.paused) {
+    const nr = Object.assign({}, r, { paused: false, dateKey: keyOf(new Date()), startMs: Date.now(), startMin: Math.round(nowMin()) });
+    S.running = nr; save("state/running", nr); render(); return;
+  }
+  const banked = (r.accMs || 0) + (r.startMs ? Date.now() - r.startMs : 0);
+  const log = await commitSegment(r);
+  const nr = Object.assign({}, r, { paused: true, startMs: 0, accMs: banked });
+  S.running = nr; save("state/running", nr); render();
+  if (log) note(dur(log.end - log.start) + " 기록하고 중지했습니다 · " + hhmm(log.start) + "–" + hhmm(log.end));
+}
+$("#runStop").onclick = () => stopRun();
+$("#runPause").onclick = () => pauseRun();
+
+/* ============================== timeline interaction ==============================
+   Empty space: drag to draw a block (touch: press and hold first, so the page can still scroll).
+   Existing block: drag to move it. Both land on 30-minute marks; the sheet still edits to the minute. */
+const SNAP = 30;
+["#trackPlan", "#trackAct"].forEach((sel) => {
+  const el = $(sel), kind = el.dataset.kind;
+  let drag = null, hold = null;
+
+  const step = () => el.getBoundingClientRect().height / slots();          // px per 10 min
+  const minAt = (cy) => clamp(S.set.dayStart + (cy - el.getBoundingClientRect().top) / step() * 10, S.set.dayStart, S.set.dayEnd);
+  const yOf = (m) => (m - S.set.dayStart) / 10 * step();
+  const snap = (m) => clamp(Math.round(m / SNAP) * SNAP, S.set.dayStart, S.set.dayEnd);
+  const recs = () => (kind === "plan" ? day().plans : day().logs);
+
+  function ghost(a, b) {
+    if (!drag.g) { drag.g = document.createElement("div"); drag.g.className = "dragsel"; el.appendChild(drag.g); }
+    drag.g.style.top = yOf(a) + "px";
+    drag.g.style.height = Math.max(6, yOf(b) - yOf(a)) + "px";
+    drag.g.textContent = hhmm(a) + "–" + hhmm(b);
+  }
+  function activate() {
+    if (!drag) return;
+    drag.active = true;
+    el.classList.add("dragging");
+    try { el.setPointerCapture(drag.pid); } catch (e) { }
+    if (drag.mode === "create") { const a = snap(drag.m0); ghost(a, Math.min(a + SNAP, S.set.dayEnd)); drag.a = a; drag.b = Math.min(a + SNAP, S.set.dayEnd); }
+    else if (drag.el) drag.el.classList.add("moving");
+  }
+  function clear() {
+    if (hold) { clearTimeout(hold); hold = null; }
+    if (drag) { if (drag.g) drag.g.remove(); if (drag.el) drag.el.classList.remove("moving"); }
+    el.classList.remove("dragging");
+    drag = null;
+  }
+
+  el.addEventListener("pointerdown", (e) => {
+    if (readOnly || e.button === 2) return;
+    const b = e.target.closest(".blk");
+    if (b && b.dataset.id === "__live") { drag = { mode: "live", y0: e.clientY, pid: e.pointerId }; return; }
+    const rec = b ? recs().find((x) => x.id === b.dataset.id) : null;
+    drag = { mode: rec ? "move" : "create", id: rec ? rec.id : null, el: rec ? b : null, pid: e.pointerId,
+             s0: rec ? rec.start : 0, len: rec ? rec.end - rec.start : 0,
+             y0: e.clientY, x0: e.clientX, m0: minAt(e.clientY), moved: false, active: false, g: null };
+    if (rec || e.pointerType !== "touch") activate();
+    else hold = setTimeout(activate, 280);
+  });
+
+  el.addEventListener("pointermove", (e) => {
+    if (!drag || drag.mode === "live") return;
+    // sideways swipe on a phone = move to the other track
+    const dx = e.clientX - drag.x0;
+    if (!drag.moved && isPhone() && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(e.clientY - drag.y0) * 1.4) {
+      setPane(dx < 0 ? 1 : 0); clear(); return;
+    }
+    const dy = Math.abs(e.clientY - drag.y0);
+    if (!drag.active) { if (dy > 14) clear(); return; }   // wobble is fine; a real swipe scrolls the page
+    if (dy > 7) drag.moved = true;
+    if (!drag.moved) return;
+    const m = minAt(e.clientY);
+    if (drag.mode === "create") {
+      let a = snap(Math.min(drag.m0, m)), b = snap(Math.max(drag.m0, m));
+      if (b - a < SNAP) { if (a + SNAP <= S.set.dayEnd) b = a + SNAP; else a = b - SNAP; }
+      drag.a = a; drag.b = b; ghost(a, b);
+    } else {
+      const ns = clamp(drag.s0 + Math.round((m - drag.m0) / SNAP) * SNAP, S.set.dayStart, S.set.dayEnd - drag.len);
+      drag.ns = ns;
+      if (drag.el) {
+        drag.el.style.top = yOf(ns) + "px";
+        const lb = drag.el.querySelector("b"); if (lb) lb.textContent = hhmm(ns) + "–" + hhmm(ns + drag.len);
+      }
+    }
+  }, { passive: true });
+
+  // Once a hold-drag is under way, keep the page from scrolling out from under it.
+  el.addEventListener("touchmove", (e) => { if (drag && drag.active && drag.moved) e.preventDefault(); }, { passive: false });
+
+  el.addEventListener("pointerup", () => {
+    if (!drag) return;
+    const d = drag; clear();
+    if (d.mode === "live") { stopRun(); return; }
+    if (d.mode === "move") {
+      if (d.moved && d.ns != null && d.ns !== d.s0) {
+        const r = recs().find((x) => x.id === d.id);
+        if (r) { r.start = d.ns; r.end = d.ns + d.len; saveDay(); }
+        render();
+      } else { render(); blockSheet(kind, d.id); }
+      return;
+    }
+    if (d.moved && d.a != null) { blockSheet(kind, null, { start: d.a, end: d.b }); return; }
+    const a = clamp(Math.floor(d.m0 / SNAP) * SNAP, S.set.dayStart, S.set.dayEnd - SNAP);
+    blockSheet(kind, null, { start: a, end: a + SNAP });
+  });
+  el.addEventListener("pointercancel", clear);
+
+  // keyboard: Enter/Space on a block opens it (pointer handlers cover mouse and touch)
+  el.addEventListener("click", (e) => {
+    if (e.detail !== 0) return;
+    const b = e.target.closest(".blk"); if (!b) return;
+    if (b.dataset.id === "__live") stopRun(); else blockSheet(kind, b.dataset.id);
+  });
+});
+document.querySelectorAll(".js-manual").forEach((b) => b.onclick = () => {
+  const a = Math.floor(nowMin() / 10) * 10;
+  blockSheet("log", null, { start: clamp(a - 30, S.set.dayStart, S.set.dayEnd - 10), end: clamp(a, S.set.dayStart + 10, S.set.dayEnd) });
+});
+
+/* ---- phone: one track fills the width; tabs or a sideways swipe move between them ---- */
+function isPhone() { try { return window.matchMedia("(max-width:899px)").matches; } catch (e) { return false; } }
+function setPane(i) {
+  S.pane = i = i ? 1 : 0;
+  $("#panes").style.setProperty("--pane-x", i ? "calc(-100% - 8px)" : "0px");
+  document.querySelectorAll(".pane-tabs .pt").forEach((b) => b.setAttribute("aria-selected", +b.dataset.i === i));
+  document.querySelectorAll(".js-manual").forEach((b) => { if (b.id === "manualM") b.hidden = readOnly || i !== 1; });
+}
+document.querySelectorAll(".pane-tabs .pt").forEach((b) => b.onclick = () => setPane(+b.dataset.i));
+setPane(0);
+
+/* ============================== sheets ============================== */
+function closeSheet() { $("#overlay").hidden = true; $("#sheet").innerHTML = ""; }
+$("#overlay").addEventListener("pointerdown", (e) => { if (e.target.id === "overlay") closeSheet(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#overlay").hidden) closeSheet(); });
+function openSheet(html) {
+  $("#sheet").innerHTML = html; $("#overlay").hidden = false;
+  const f = $("#sheet").querySelector("input,select,textarea,button"); if (f) f.focus();
+}
+function tagOptions(cur) { return S.set.tags.map((t) => '<option value="' + esc(t.id) + '"' + (t.id === cur ? " selected" : "") + ">" + esc(t.name) + "</option>").join(""); }
+
+function taskSheet(t) {
+  openSheet('<h3>할일 수정</h3>' +
+    '<div class="fld"><label for="eTitle">내용</label><input type="text" id="eTitle" maxlength="90" value="' + esc(t.title) + '"></div>' +
+    '<div class="fld"><label for="eTag">분류 태그</label><select id="eTag">' + tagOptions(t.tagId) + "</select></div>" +
+    '<div class="sheet-foot"><button class="btn danger del" id="eDel">삭제</button><button class="btn ghost" id="eCancel">취소</button><button class="btn go-save" id="eSave">저장</button></div>');
+  $("#eCancel").onclick = closeSheet;
+  $("#eSave").onclick = () => {
+    const v = $("#eTitle").value.trim(); if (!v) return;
+    t.title = v; t.tagId = $("#eTag").value; saveDay(); closeSheet(); render();
+  };
+  $("#eDel").onclick = () => {
+    const d = day();
+    d.tasks = d.tasks.filter((x) => x.id !== t.id);
+    d.plans = d.plans.filter((x) => x.taskId !== t.id);
+    d.logs.forEach((l) => { if (l.taskId === t.id) { l.taskId = null; l.label = t.title; l.tagId = t.tagId; } });
+    saveDay(); closeSheet(); render();
+  };
+}
+
+function blockSheet(kind, id, preset) {
+  const d = day(), arr = kind === "plan" ? d.plans : d.logs;
+  const o = id ? arr.find((x) => x.id === id) : null;
+  const firstOpen = d.tasks.find((t) => !t.done);
+  const cur = o || Object.assign({ id: null, taskId: firstOpen ? firstOpen.id : null, label: "", tagId: S.set.tags[0].id, note: "" }, preset || { start: 540, end: 570 });
+  const isPlan = kind === "plan";
+  const taskOpts = '<option value="">— 직접 입력 —</option>' + d.tasks.map((t) => '<option value="' + t.id + '"' + (cur.taskId === t.id ? " selected" : "") + ">" + esc(t.title) + "</option>").join("");
+  openSheet('<h3>' + (isPlan ? "계획" : "실제 기록") + (o ? " 수정" : " 추가") + "</h3>" +
+    '<div class="fld"><label for="bTask">할일</label><select id="bTask">' + taskOpts + "</select></div>" +
+    '<div class="fld" id="freeWrap"' + (cur.taskId ? " hidden" : "") + '><label for="bLabel">직접 입력 + 태그</label>' +
+    '<div class="times"><input type="text" id="bLabel" maxlength="60" placeholder="무엇을 했는지" value="' + esc(cur.label || "") + '"><select id="bTag" style="flex:0 0 108px">' + tagOptions(cur.tagId) + "</select></div></div>" +
+    '<div class="fld"><label>시간 (10분 단위)</label><div class="times">' +
+    '<input type="time" id="bStart" step="600" value="' + toTimeVal(cur.start) + '"><span style="color:var(--muted)">→</span>' +
+    '<input type="time" id="bEnd" step="600" value="' + toTimeVal(cur.end) + '"></div>' +
+    '<div class="mini" id="bDur" style="color:var(--muted);margin-top:5px"></div></div>' +
+    (isPlan && o ? '<div class="fld"><label>실제 기록으로 보내기</label><div class="times">' +
+      '<button class="btn ghost" id="pNow" style="flex:1">지금 시작</button>' +
+      '<button class="btn ghost" id="pAs" style="flex:1">계획대로 기록</button></div></div>' : "") +
+    (isPlan ? "" : '<div class="fld"><label for="bNote">메모</label><input type="text" id="bNote" maxlength="120" value="' + esc(cur.note || "") + '"></div>') +
+    '<div class="sheet-foot">' + (o ? '<button class="btn danger del" id="bDel">삭제</button>' : "") +
+    '<button class="btn ghost" id="bCancel">취소</button><button class="btn go-save" id="bSave" style="' + (isPlan ? "" : "background:var(--actual)") + '">' + (o ? "저장" : "등록") + "</button></div>");
+
+  const rd = () => { const a = fromTimeVal($("#bStart").value, S.set.dayStart - 1); return [a, fromTimeVal($("#bEnd").value, a)]; };
+  const sync = () => {
+    const r = rd(), a = r[0], b = r[1];
+    $("#bDur").textContent = a != null && b != null && b > a ? dur(b - a) : "종료가 시작보다 늦어야 합니다";
+    $("#bSave").disabled = !(a != null && b != null && b > a);
+  };
+  $("#bStart").oninput = sync; $("#bEnd").oninput = sync; sync();
+  $("#bTask").onchange = () => { $("#freeWrap").hidden = !!$("#bTask").value; };
+  if (isPlan && o) {
+    $("#pNow").onclick = () => {
+      beginRun(o.taskId, o.taskId ? labelOf(o) : (o.label || "기록 중"), o.taskId ? (task(o.taskId) || {}).tagId : o.tagId);
+      closeSheet(); note(labelOf(o) + " 기록을 시작했습니다.");
+    };
+    $("#pAs").onclick = () => {
+      logFromPlan(o); saveDay(); closeSheet(); render();
+      note(hhmm(o.start) + "–" + hhmm(o.end) + " 실제 기록에 옮겼습니다.");
+    };
+  }
+  $("#bCancel").onclick = closeSheet;
+  if (o) $("#bDel").onclick = () => { const i = arr.findIndex((x) => x.id === o.id); if (i > -1) arr.splice(i, 1); saveDay(); closeSheet(); render(); };
+  $("#bSave").onclick = () => {
+    const r = rd(), a = r[0], b = r[1];
+    if (!(a != null && b != null && b > a)) return;
+    const tid = $("#bTask").value || null;
+    const rec = {
+      id: o ? o.id : uid(), taskId: tid,
+      label: tid ? "" : ($("#bLabel").value.trim() || (isPlan ? "계획" : "기록")),
+      tagId: tid ? (task(tid) || {}).tagId : $("#bTag").value,
+      start: roundTo(a, 10), end: roundTo(b, 10)
+    };
+    if (!isPlan) rec.note = ($("#bNote") ? $("#bNote").value.trim() : "");
+    if (rec.end <= rec.start) rec.end = rec.start + 10;
+    if (o) { const i = arr.findIndex((x) => x.id === o.id); arr[i] = rec; } else arr.push(rec);
+    saveDay(); closeSheet(); render();
+  };
+}
+
+/* ============================== stats ============================== */
+function overlap(a1, a2, b1, b2) { return Math.max(0, Math.min(a2, b2) - Math.max(a1, b1)); }
+function dayStats(d) {
+  const tasks = d.tasks || [], plans = d.plans || [], logs = d.logs || [];
+  const planMin = plans.reduce((s, p) => s + Math.max(0, p.end - p.start), 0);
+  const actMin = logs.reduce((s, l) => s + Math.max(0, l.end - l.start), 0);
+  let kept = 0;
+  plans.forEach((p) => {
+    logs.forEach((l) => { if (p.taskId && l.taskId === p.taskId) kept += overlap(p.start, p.end, l.start, l.end); });
+  });
+  kept = Math.min(kept, planMin);
+  const byTag = {};
+  logs.forEach((l) => {
+    const t = l.taskId ? (tasks.find((x) => x.id === l.taskId) || {}) : l;
+    const k = t.tagId || l.tagId || "etc";
+    byTag[k] = (byTag[k] || 0) + Math.max(0, l.end - l.start);
+  });
+  return {
+    date: d.date, total: tasks.length, done: tasks.filter((t) => t.done).length,
+    rate: tasks.length ? tasks.filter((t) => t.done).length / tasks.length : null,
+    planMin, actMin, kept, keepRate: planMin ? kept / planMin : null, byTag
+  };
+}
+async function drawStats() {
+  const host = $("#viewStats");
+  host.innerHTML = '<div class="empty">불러오는 중…</div>';
+  const rows = await readDays(70);
+  const map = {}; rows.forEach((r) => { if (r && r.date) map[r.date] = dayStats(r); });
+  const todayKey = keyOf(new Date());
+  const t = map[todayKey] || dayStats(emptyDay(todayKey));
+
+  const last = (n) => { const o = []; for (let i = n - 1; i >= 0; i--) { const k = shiftKey(todayKey, -i); o.push(map[k] || { date: k, total: 0, done: 0, rate: null, planMin: 0, actMin: 0, kept: 0, keepRate: null, byTag: {} }); } return o; };
+  const w = last(7), m30 = last(30);
+  const sum = (a, f) => a.reduce((s, x) => s + (f(x) || 0), 0);
+  const rated = w.filter((x) => x.rate != null);
+  const wRate = rated.length ? sum(rated, (x) => x.rate) / rated.length : null;
+  const keepers = w.filter((x) => x.keepRate != null);
+  const wKeep = keepers.length ? sum(keepers, (x) => x.keepRate) / keepers.length : null;
+  const maxBar = Math.max(60, ...w.map((x) => Math.max(x.planMin, x.actMin)));
+  const tagTot = {}; m30.slice(-7).forEach((d) => Object.keys(d.byTag).forEach((k) => tagTot[k] = (tagTot[k] || 0) + d.byTag[k]));
+  const tagMax = Math.max(1, ...Object.values(tagTot));
+
+  host.innerHTML =
+    '<div class="stat-grid">' +
+      card("오늘 달성", t.total ? Math.round((t.rate || 0) * 100) + "%" : "—", t.total ? t.done + " / " + t.total + "건" : "할일이 없습니다", t.rate, "var(--ok)") +
+      card("오늘 실제 시간", t.actMin ? dur(t.actMin) : "—", "계획 " + (t.planMin ? dur(t.planMin) : "없음"), t.planMin ? Math.min(1, t.actMin / t.planMin) : null, "var(--actual)") +
+      card("계획 이행률", t.keepRate != null ? Math.round(t.keepRate * 100) + "%" : "—", t.planMin ? "계획한 시간에 그 일을 한 비율" : "계획을 올리면 계산됩니다", t.keepRate, "var(--plan)") +
+      card("주간 평균 달성", wRate != null ? Math.round(wRate * 100) + "%" : "—", "최근 7일 · 이행률 " + (wKeep != null ? Math.round(wKeep * 100) + "%" : "—"), wRate, "var(--ok)") +
+    "</div>" +
+
+    '<div class="sec-t">최근 7일 · 계획 대비 실제</div>' +
+    '<div class="card"><div class="card-b"><div class="week">' +
+      w.map((d) => {
+        const dd = parseKey(d.date);
+        return '<div class="col"><div class="stack">' +
+          '<div class="b p" style="height:' + (d.planMin / maxBar * 100) + '%" title="계획 ' + dur(d.planMin) + '"></div>' +
+          '<div class="b a" style="height:' + (d.actMin / maxBar * 100) + '%" title="실제 ' + dur(d.actMin) + '"></div>' +
+          '</div><div class="pct">' + (d.rate != null ? Math.round(d.rate * 100) + "%" : "·") + "</div>" +
+          '<div class="lab">' + DOW[dd.getDay()] + "</div></div>";
+      }).join("") +
+    '</div><div class="legend"><span><b style="background:color-mix(in srgb,var(--plan) 50%,transparent)"></b>계획</span><span><b style="background:var(--actual)"></b>실제</span><span>막대 최대 ' + dur(maxBar) + " · 숫자는 할일 달성률</span></div></div></div>" +
+
+    '<div class="sec-t">최근 7일 · 태그별 실제 시간</div>' +
+    '<div class="card"><div class="card-b"><div class="rows">' +
+      (Object.keys(tagTot).length ? S.set.tags.filter((g) => tagTot[g.id]).sort((a, b) => tagTot[b.id] - tagTot[a.id]).map((g) =>
+        '<div class="row2"><span class="tag" style="--c:' + esc(g.color) + '">' + esc(g.name) + "</span>" +
+        '<span class="bar"><i style="width:' + (tagTot[g.id] / tagMax * 100) + "%;--c:" + esc(g.color) + '"></i></span>' +
+        '<span class="n">' + dur(tagTot[g.id]) + "</span></div>").join("")
+        : '<div class="empty">기록이 모이면 태그별 시간이 쌓입니다.</div>') +
+    "</div></div></div>" +
+
+    '<div class="sec-t">최근 30일 달성률</div>' +
+    '<div class="card"><div class="card-b"><div class="heat">' +
+      m30.map((d) => {
+        const r = d.rate, c = r == null ? "var(--surface-2)" : "color-mix(in srgb,var(--ok) " + Math.round(18 + r * 78) + "%,var(--surface-2))";
+        return '<i style="background:' + c + '" title="' + d.date + " · " + (r == null ? "기록 없음" : Math.round(r * 100) + "%") + '"></i>';
+      }).join("") +
+    '</div><div class="legend"><span>왼쪽이 30일 전, 오른쪽이 오늘 · 진할수록 달성률이 높습니다</span></div></div></div>';
+
+  function card(k, v, s, ratio, c) {
+    return '<div class="stat"><div class="k">' + k + '</div><div class="v">' + v + '</div><div class="s">' + s + "</div>" +
+      (ratio != null ? '<div class="bar"><i style="width:' + Math.round(clamp(ratio, 0, 1) * 100) + "%;--c:" + c + '"></i></div>' : "") + "</div>";
+  }
+}
+
+/* ============================== settings ============================== */
+function drawSettings() {
+  const host = $("#viewSet");
+  const hrOpts = (from, to, cur, nextDay) => { let o = ""; for (let h = from; h <= to; h++) o += '<option value="' + h * 60 + '"' + (h * 60 === cur ? " selected" : "") + ">" + pad(h % 24) + ":00" + (nextDay && h >= 24 ? " (익일)" : "") + "</option>"; return o; };
+  host.innerHTML =
+    '<div class="card"><div class="card-h"><h2>타임라인</h2></div><div class="card-b">' +
+      '<div class="set-row"><span class="lab">하루 시작</span><select id="sStart">' + hrOpts(0, 12, S.set.dayStart) + "</select>" +
+      '<span class="lab" style="flex:0 0 auto">끝</span><select id="sEnd">' + hrOpts(18, 28, S.set.dayEnd, true) + "</select></div>" +
+      '<div class="set-row"><span class="lab">격자 단위</span><span style="font-size:12.5px;color:var(--muted)">10분 고정 · 직접 입력은 10분, 드래그는 30분 단위입니다. 시작·종료 버튼으로 잰 기록만 1분 단위로 남습니다.</span></div>' +
+    "</div></div>" +
+    '<div class="sec-t">분류 태그</div>' +
+    '<div class="card"><div class="card-b"><div class="taglist" id="tagList"></div>' +
+      '<button class="btn ghost" id="addTag" style="margin-top:10px;width:100%">태그 추가</button></div></div>' +
+    '<div class="sec-t">요일 루틴</div>' +
+    '<div class="card"><div class="card-b"><div class="taglist" id="rtList"></div>' +
+      '<button class="btn ghost" id="addRt" style="margin-top:10px;width:100%">루틴 추가</button>' +
+      '<p class="rt-note">시간표·아르바이트처럼 요일마다 반복되는 일정입니다. 해당 요일이 되면 <b>계획</b> 칸에 저절로 들어가고(↻ 표시), 실제 칸에는 들어가지 않습니다.<br>' +
+      '오늘과 앞으로의 날짜에만 적용되며, 지난 기록은 건드리지 않습니다. 하루치 블록을 지우면 그날엔 다시 생기지 않습니다.</p>' +
+    "</div></div>" +
+    '<div class="sec-t">데이터</div>' +
+    '<div class="card"><div class="card-b"><div style="font-size:12.5px;color:var(--muted);line-height:1.65">' +
+      (FB && DB ? "<b>" + esc(S.email) + "</b> 계정의 클라우드에 저장됩니다. 같은 계정으로 로그인한 PC·휴대폰이 같은 기록을 공유하고, 앱이 업데이트돼도 기록은 그대로 남습니다."
+          : "지금은 이 브라우저에만 저장됩니다.") +
+      '<br>날짜별로 한 건씩 저장되므로 과거 날짜는 왼쪽 상단 화살표로 언제든 열어 수정할 수 있습니다.</div>' +
+      '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">' +
+        '<button class="btn ghost" id="dExp">백업 내보내기</button>' +
+        '<button class="btn ghost" id="dImp">백업 불러오기</button>' +
+        (FB ? '<button class="btn ghost" id="dOut">로그아웃</button>' : "") +
+        '<input type="file" id="dFile" accept="application/json,.json" hidden>' +
+      "</div></div></div>";
+  $("#dExp").onclick = exportAll;
+  $("#dImp").onclick = () => $("#dFile").click();
+  $("#dFile").onchange = (e) => { if (e.target.files[0]) importAll(e.target.files[0]); };
+  if ($("#dOut")) $("#dOut").onclick = async () => { try { await FB.signOut(); } catch (x) { } location.reload(); };
+
+  $("#sStart").onchange = () => { S.set.dayStart = +$("#sStart").value; fixWindow(); };
+  $("#sEnd").onchange = () => { S.set.dayEnd = +$("#sEnd").value; fixWindow(); };
+  const list = $("#tagList");
+  list.innerHTML = S.set.tags.map((t, i) =>
+    '<div class="tagedit" data-i="' + i + '"><input type="color" value="' + esc(t.color) + '" aria-label="색"><input type="text" value="' + esc(t.name) + '" maxlength="14" aria-label="태그 이름">' +
+    '<button class="iconbtn" data-del="' + i + '" title="삭제" ' + (S.set.tags.length <= 1 ? "disabled" : "") + ">✕</button></div>").join("");
+  list.querySelectorAll(".tagedit").forEach((row) => {
+    const i = +row.dataset.i;
+    row.querySelector('input[type=color]').oninput = (e) => { S.set.tags[i].color = e.target.value; saveSet(); drawTasks(); drawTimeline(); };
+    row.querySelector('input[type=text]').onchange = (e) => { S.set.tags[i].name = e.target.value.trim() || S.set.tags[i].name; saveSet(); drawTagSelect(); drawTasks(); };
+    const del = row.querySelector("[data-del]");
+    if (del) del.onclick = () => { S.set.tags.splice(i, 1); saveSet(); drawSettings(); };
+  });
+  $("#addTag").onclick = () => {
+    S.set.tags.push({ id: "t" + uid().slice(0, 5), name: "새 태그", color: "#5A7D8C" });
+    saveSet(); drawSettings();
+  };
+
+  const rl = $("#rtList");
+  rl.innerHTML = S.rt.items.length ? S.rt.items.map((r, i) =>
+    '<div class="rt-row" data-i="' + i + '">' +
+      '<div class="rt-top"><input type="text" class="rt-name" maxlength="40" value="' + esc(r.title || "") + '" placeholder="예: 자료구조 수업" aria-label="루틴 이름">' +
+      '<select class="rt-tag" aria-label="태그">' + tagOptions(r.tagId) + "</select>" +
+      '<button class="iconbtn rt-del" title="루틴 삭제">✕</button></div>' +
+      '<div class="rt-days">' + DOW.map((n, k) =>
+        '<button class="rt-day" data-d="' + k + '" aria-pressed="' + ((r.days || []).indexOf(k) >= 0) + '">' + n + "</button>").join("") + "</div>" +
+      '<div class="rt-time"><input type="time" step="600" class="rt-s" value="' + toTimeVal(r.start) + '" aria-label="시작">' +
+      "<span>→</span>" +
+      '<input type="time" step="600" class="rt-e" value="' + toTimeVal(r.end) + '" aria-label="종료"></div>' +
+    "</div>").join("")
+    : '<div class="empty">아직 루틴이 없습니다. 수업·알바처럼 매주 같은 시간에 반복되는 일정을 추가해 보세요.</div>';
+
+  rl.querySelectorAll(".rt-row").forEach((row) => {
+    const i = +row.dataset.i, r = S.rt.items[i];
+    const commit = () => { saveRt(); refreshRoutine(r.id); };
+    row.querySelector(".rt-name").onchange = (e) => { r.title = e.target.value.trim() || "루틴"; commit(); drawSettings(); };
+    row.querySelector(".rt-tag").onchange = (e) => { r.tagId = e.target.value; commit(); };
+    row.querySelector(".rt-s").onchange = (e) => {
+      const v = fromTimeVal(e.target.value, S.set.dayStart - 1);
+      if (v != null) { r.start = roundTo(v, 10); if (r.end <= r.start) r.end = r.start + 60; }
+      commit(); drawSettings();
+    };
+    row.querySelector(".rt-e").onchange = (e) => {
+      const v = fromTimeVal(e.target.value, r.start);
+      if (v != null && v > r.start) r.end = roundTo(v, 10);
+      commit(); drawSettings();
+    };
+    row.querySelectorAll(".rt-day").forEach((db) => db.onclick = () => {
+      const k = +db.dataset.d;
+      r.days = Array.isArray(r.days) ? r.days : [];
+      const at = r.days.indexOf(k);
+      if (at >= 0) r.days.splice(at, 1); else r.days.push(k);
+      db.setAttribute("aria-pressed", at < 0);
+      commit();
+    });
+    row.querySelector(".rt-del").onclick = () => {
+      const id = r.id;
+      S.rt.items.splice(i, 1); saveRt(); refreshRoutine(id); drawSettings();
+    };
+  });
+  $("#addRt").onclick = () => {
+    S.rt.items.push({ id: "r" + uid(), title: "새 루틴", tagId: S.set.tags[0].id, days: [1, 2, 3, 4, 5], start: 540, end: 600 });
+    saveRt(); applyRoutines(); drawSettings();
+  };
+  if (readOnly) host.querySelectorAll("input,select,button").forEach((e) => e.disabled = true);
+}
+function fixWindow() {
+  S.set.dayStart = clamp(Math.round(S.set.dayStart / 60) * 60, 0, 780);
+  S.set.dayEnd = clamp(Math.round(S.set.dayEnd / 60) * 60, S.set.dayStart + 360, 1680);
+  saveSet(); drawSettings();
+}
+function saveSet() { save("settings/app", { tags: S.set.tags, dayStart: S.set.dayStart, dayEnd: S.set.dayEnd }); }
+
+/* ============================== nav ============================== */
+$("#tabToday").onclick = () => { S.view = "today"; render(); };
+$("#tabStats").onclick = () => { S.view = "stats"; render(); drawStats(); };
+$("#tabSet").onclick = () => { S.view = "set"; render(); };
+$("#prevDay").onclick = () => openDay(shiftKey(S.dateKey, -1));
+$("#nextDay").onclick = () => openDay(shiftKey(S.dateKey, 1));
+$("#goToday").onclick = () => openDay(keyOf(new Date()));
+try {
+  const h = (location.hash || "").replace("#", "");
+  if (h === "stats" || h === "set") { S.view = h; render(); if (h === "stats") drawStats(); }
+} catch (e) { }
+</script>
+
+<script type="module" src="./fb.js" onerror="window.__fbResolve&&window.__fbResolve(null)"></script>
+<script>
+/* Installed app: register the worker so it opens offline and refreshes itself. */
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  addEventListener("load", function () {
+    navigator.serviceWorker.register("./sw.js").catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
