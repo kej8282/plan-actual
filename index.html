@@ -136,6 +136,15 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .blk.live{border-style:dashed;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 22%,var(--surface)) 0 7px,color-mix(in srgb,var(--c) 11%,var(--surface)) 7px 14px)}
 .dragsel{position:absolute;left:2px;right:2px;border:1.5px dashed var(--dc,var(--plan));background:color-mix(in srgb,var(--dc,var(--plan)) 16%,transparent);border-radius:5px;pointer-events:none;z-index:3;display:flex;align-items:center;justify-content:center;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:10px;font-weight:500;color:var(--dc,var(--plan));overflow:hidden;white-space:nowrap}
 .blk.moving{z-index:5;cursor:grabbing;box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:.95}
+/* 눌림 피드백 (터치) */
+.blk{transition:filter .14s,opacity .14s,transform .14s}
+.blk.pressing{filter:brightness(.9);transform:scale(.985)}
+.track.pressing{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 16%,transparent)}
+#tlWrap.dragmode .blk:not(.moving){opacity:.32;filter:saturate(.25)}
+#tlWrap.dragmode .blk.moving{filter:none;transform:scale(1.015);box-shadow:0 8px 22px rgba(0,0,0,.28)}
+#tlWrap.dragmode .nowline{opacity:.35}
+#tlWrap.dragmode .dragsel{box-shadow:0 6px 18px rgba(0,0,0,.22)}
+@media (prefers-reduced-motion:reduce){.blk{transition:none}}
 .blk.rt{border-left-style:dotted;border-left-width:4px}
 .blk .rtm{font-style:normal;font-size:9px;color:var(--muted);margin-right:3px;vertical-align:1px}
 .blk .nt{display:block;font-size:10px;line-height:1.3;color:var(--muted);white-space:pre-wrap;margin-top:1px}
@@ -1027,13 +1036,26 @@ const SNAP = 30;
     drag.active = true;
     el.classList.add("dragging");
     try { el.setPointerCapture(drag.pid); } catch (e) { }
-    if (drag.mode === "create") { const a = snap(drag.m0); ghost(a, Math.min(a + SNAP, S.set.dayEnd)); drag.a = a; drag.b = Math.min(a + SNAP, S.set.dayEnd); }
+    if (drag.mode === "create") { const a = snap(drag.m0); ghost(a, Math.min(a + SNAP, S.set.dayEnd)); drag.a = a; drag.b = Math.min(a + SNAP, S.set.dayEnd); enterDragMode(); }
     else if (drag.el) drag.el.classList.add("moving");
+  }
+  /* 터치 전용 눌림 피드백. 누르는 중엔 눌린 것만 살짝 어두워지고,
+     드래그가 실제로 시작되면 나머지는 칙칙하게 가라앉아 "지금 드래그 중"이 보인다. */
+  function enterDragMode() {
+    if (!drag || !drag.touch || drag.fx) return;
+    drag.fx = true;
+    $("#tlWrap").classList.add("dragmode");
+    try { if (navigator.vibrate) navigator.vibrate(14); } catch (e) { }
   }
   function clear() {
     if (hold) { clearTimeout(hold); hold = null; }
-    if (drag) { if (drag.g) drag.g.remove(); if (drag.el) drag.el.classList.remove("moving"); }
+    if (drag) {
+      if (drag.g) drag.g.remove();
+      if (drag.el) drag.el.classList.remove("moving");
+      if (drag.pe) drag.pe.classList.remove("pressing");
+    }
     el.classList.remove("dragging");
+    $("#tlWrap").classList.remove("dragmode");
     drag = null;
   }
 
@@ -1044,7 +1066,9 @@ const SNAP = 30;
     const rec = b ? recs().find((x) => x.id === b.dataset.id) : null;
     drag = { mode: rec ? "move" : "create", id: rec ? rec.id : null, el: rec ? b : null, pid: e.pointerId,
              s0: rec ? rec.start : 0, len: rec ? rec.end - rec.start : 0,
-             y0: e.clientY, x0: e.clientX, m0: minAt(e.clientY), moved: false, active: false, g: null };
+             y0: e.clientY, x0: e.clientX, m0: minAt(e.clientY), moved: false, active: false, g: null,
+             touch: e.pointerType === "touch", fx: false, pe: null };
+    if (drag.touch) { drag.pe = b || el; drag.pe.classList.add("pressing"); }
     if (rec || e.pointerType !== "touch") activate();
     else hold = setTimeout(activate, 280);
   });
@@ -1060,6 +1084,7 @@ const SNAP = 30;
     if (!drag.active) { if (dy > 14) clear(); return; }   // wobble is fine; a real swipe scrolls the page
     if (dy > 7) drag.moved = true;
     if (!drag.moved) return;
+    if (drag.mode === "move") enterDragMode();
     const m = minAt(e.clientY);
     if (drag.mode === "create") {
       let a = snap(Math.min(drag.m0, m)), b = snap(Math.max(drag.m0, m));
@@ -1123,7 +1148,14 @@ setPane(0);
 function closeSheet() { $("#overlay").hidden = true; $("#sheet").innerHTML = ""; }
 $("#overlay").addEventListener("pointerdown", (e) => { if (e.target.id === "overlay") closeSheet(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#overlay").hidden) closeSheet(); });
+/* 블록을 탭하면 손을 뗀 순간 시트가 열리는데, 뒤따라 오는 클릭이 그 자리에 새로 생긴
+   시트(저장 버튼 등)에 떨어질 수 있다. 막 열린 시트는 잠깐 클릭을 받지 않는다. */
+let sheetOpenedAt = 0;
+document.addEventListener("click", (e) => {
+  if (Date.now() - sheetOpenedAt < 380 && e.target.closest && e.target.closest("#overlay")) { e.preventDefault(); e.stopPropagation(); }
+}, true);
 function openSheet(html) {
+  sheetOpenedAt = Date.now();
   $("#sheet").innerHTML = html; $("#overlay").hidden = false;
   const f = $("#sheet").querySelector("input,select,textarea,button"); if (f) f.focus();
 }
