@@ -138,6 +138,13 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .blk.moving{z-index:5;cursor:grabbing;box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:.95}
 .blk.rt{border-left-style:dotted;border-left-width:4px}
 .blk .rtm{font-style:normal;font-size:9px;color:var(--muted);margin-right:3px;vertical-align:1px}
+.blk .nt{display:block;font-size:10px;line-height:1.3;color:var(--muted);white-space:pre-wrap;margin-top:1px}
+.blk.tiny .nt{display:none}
+.tp{display:inline-flex;align-items:center;gap:3px}
+.tp select{flex:0 0 auto;width:auto;min-width:62px;font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.tp b{color:var(--muted);font-weight:500}
+.times .tp{flex:1}
+.times .tp select{flex:1;min-width:0}
 /* ---------- weekday routines ---------- */
 .rt-row{border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px;background:var(--surface-2)}
 .rt-top{display:flex;gap:7px;align-items:center}
@@ -307,6 +314,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .fld{margin-bottom:11px}
 .fld label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:4px}
 .fld input[type=text],.fld select,.fld textarea{width:100%}
+.fld textarea{font:inherit;padding:8px 9px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2);color:var(--ink);resize:vertical;min-height:52px}
 .times{display:flex;align-items:center;gap:8px}
 .times input{flex:1;min-width:0}
 .sheet-foot{display:flex;gap:8px;margin-top:17px;padding-top:13px;border-top:1px solid var(--line-soft)}
@@ -445,6 +453,26 @@ function roundTo(m, step) { return Math.round(m / step) * step; }
 function nowMin() { const d = new Date(); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function toTimeVal(m) { return hhmm(m); }
+/* 시간 고르기 — 10분 단위로만 고를 수 있고, 네이티브 시계 아이콘 대신 글자 전체가 눌린다.
+   hhmm 은 24시를 넘긴 값을 되감으므로, 밤을 넘기는 하루를 위해 시 목록은 27시까지 둔다. */
+function timeSelHTML(ref, m, lab, byClass) {
+  const t = clamp(roundTo(m, 10), 0, 27 * 60 + 50), h = Math.floor(t / 60), mi = t % 60;
+  const at = (s) => (byClass ? 'class="tp-' + ref + s + '"' : 'id="' + ref + s + '"');
+  let ho = "", mo = "";
+  for (let i = 0; i <= 27; i++) ho += '<option value="' + i + '"' + (i === h ? " selected" : "") + ">" + pad(i % 24) + (i >= 24 ? " 익일" : "") + "</option>";
+  for (let i = 0; i < 60; i += 10) mo += '<option value="' + i + '"' + (i === mi ? " selected" : "") + ">" + pad(i) + "</option>";
+  return '<span class="tp"><select ' + at("H") + ' aria-label="' + lab + ' 시">' + ho + '</select><b>:</b><select ' + at("M") + ' aria-label="' + lab + ' 분">' + mo + "</select></span>";
+}
+function timeSelRead(ref, root, byClass) {
+  const q = byClass ? ".tp-" + ref : "#" + ref;
+  const hs = (root || document).querySelector(q + "H"), ms = (root || document).querySelector(q + "M");
+  if (!hs || !ms) return null;
+  return +hs.value * 60 + +ms.value;
+}
+function timeSelOn(ref, root, byClass, fn) {
+  const q = byClass ? ".tp-" + ref : "#" + ref;
+  [(root || document).querySelector(q + "H"), (root || document).querySelector(q + "M")].forEach((el) => { if (el) el.onchange = fn; });
+}
 function fromTimeVal(v, ref) {
   if (!v) return null;
   const p = v.split(":").map(Number); let m = p[0] * 60 + p[1];
@@ -787,9 +815,12 @@ function blockHTML(o, kind, isLive) {
   if (b <= a) return "";
   const top = ((a - st) / 10) * 100 / span, h = ((b - a) / 10) * 100 / span;
   const mins = b - a, tiny = mins < 25;
+  const memo = (o.note || "").trim();
   return '<button class="blk' + (tiny ? " tiny" : "") + (isLive ? " live" : "") + (o.rid ? " rt" : "") + '" data-kind="' + kind + '" data-id="' + esc(o.id) +
+    '" title="' + esc(hhmm(a) + "–" + hhmm(b) + " " + labelOf(o) + (memo ? " · " + memo : "")) +
     '" style="top:' + top + "%;height:calc(" + h + '% - 2px);--c:' + esc(colorOf(o)) + '">' +
-    "<b>" + hhmm(a) + "–" + hhmm(b) + "</b><span>" + (o.rid ? '<i class="rtm">↻</i>' : "") + esc(labelOf(o)) + "</span></button>";
+    "<b>" + hhmm(a) + "–" + hhmm(b) + "</b><span>" + (o.rid ? '<i class="rtm">↻</i>' : "") + (memo ? '<i class="rtm">✎</i>' : "") + esc(labelOf(o)) + "</span>" +
+    (memo ? '<span class="nt">' + esc(memo) + "</span>" : "") + "</button>";
 }
 function drawNow() {
   const el = $("#nowLine"), isT = S.dateKey === keyOf(new Date());
@@ -889,7 +920,7 @@ function startRun(t) { beginRun(t ? t.id : null, t ? t.title : "기록 중", t ?
 
 /* 계획 → 실제: copy one planned block, or every past block not recorded yet. */
 function logFromPlan(p) {
-  day().logs.push({ id: uid(), taskId: p.taskId || null, label: p.taskId ? "" : (p.label || "기록"), tagId: p.taskId ? (task(p.taskId) || {}).tagId : p.tagId, start: p.start, end: p.end, note: "" });
+  day().logs.push({ id: uid(), taskId: p.taskId || null, label: p.taskId ? "" : (p.label || "기록"), tagId: p.taskId ? (task(p.taskId) || {}).tagId : p.tagId, start: p.start, end: p.end, note: p.note || "" });
 }
 function fillable() {
   if (readOnly || S.dateKey !== keyOf(new Date())) return [];
@@ -1100,23 +1131,24 @@ function blockSheet(kind, id, preset) {
     '<div class="fld" id="freeWrap"' + (cur.taskId ? " hidden" : "") + '><label for="bLabel">직접 입력 + 태그</label>' +
     '<div class="times"><input type="text" id="bLabel" maxlength="60" placeholder="무엇을 했는지" value="' + esc(cur.label || "") + '"><select id="bTag" style="flex:0 0 108px">' + tagOptions(cur.tagId) + "</select></div></div>" +
     '<div class="fld"><label>시간 (10분 단위)</label><div class="times">' +
-    '<input type="time" id="bStart" step="600" value="' + toTimeVal(cur.start) + '"><span style="color:var(--muted)">→</span>' +
-    '<input type="time" id="bEnd" step="600" value="' + toTimeVal(cur.end) + '"></div>' +
+    timeSelHTML("bStart", cur.start, "시작") + '<span style="color:var(--muted)">→</span>' +
+    timeSelHTML("bEnd", cur.end, "종료") + "</div>" +
     '<div class="mini" id="bDur" style="color:var(--muted);margin-top:5px"></div></div>' +
     (isPlan && o ? '<div class="fld"><label>실제 기록으로 보내기</label><div class="times">' +
       '<button class="btn ghost" id="pNow" style="flex:1">지금 시작</button>' +
       '<button class="btn ghost" id="pAs" style="flex:1">계획대로 기록</button></div></div>' : "") +
-    (isPlan ? "" : '<div class="fld"><label for="bNote">메모</label><input type="text" id="bNote" maxlength="120" value="' + esc(cur.note || "") + '"></div>') +
+    '<div class="fld"><label for="bNote">메모</label>' +
+    '<textarea id="bNote" rows="2" maxlength="300" placeholder="' + (isPlan ? "예: 14쪽까지 · 17시부터 15~22쪽" : "무엇을 했는지 남기고 싶은 말") + '">' + esc(cur.note || "") + "</textarea></div>" +
     '<div class="sheet-foot">' + (o ? '<button class="btn danger del" id="bDel">삭제</button>' : "") +
     '<button class="btn ghost" id="bCancel">취소</button><button class="btn go-save" id="bSave" style="' + (isPlan ? "" : "background:var(--actual)") + '">' + (o ? "저장" : "등록") + "</button></div>");
 
-  const rd = () => { const a = fromTimeVal($("#bStart").value, S.set.dayStart - 1); return [a, fromTimeVal($("#bEnd").value, a)]; };
+  const rd = () => [timeSelRead("bStart"), timeSelRead("bEnd")];
   const sync = () => {
     const r = rd(), a = r[0], b = r[1];
     $("#bDur").textContent = a != null && b != null && b > a ? dur(b - a) : "종료가 시작보다 늦어야 합니다";
     $("#bSave").disabled = !(a != null && b != null && b > a);
   };
-  $("#bStart").oninput = sync; $("#bEnd").oninput = sync; sync();
+  timeSelOn("bStart", null, false, sync); timeSelOn("bEnd", null, false, sync); sync();
   $("#bTask").onchange = () => { $("#freeWrap").hidden = !!$("#bTask").value; };
   if (isPlan && o) {
     $("#pNow").onclick = () => {
@@ -1140,7 +1172,7 @@ function blockSheet(kind, id, preset) {
       tagId: tid ? (task(tid) || {}).tagId : $("#bTag").value,
       start: roundTo(a, 10), end: roundTo(b, 10)
     };
-    if (!isPlan) rec.note = ($("#bNote") ? $("#bNote").value.trim() : "");
+    rec.note = ($("#bNote") ? $("#bNote").value.trim().slice(0, 300) : "");
     if (rec.end <= rec.start) rec.end = rec.start + 10;
     if (o) { const i = arr.findIndex((x) => x.id === o.id); arr[i] = rec; } else arr.push(rec);
     saveDay(); closeSheet(); render();
@@ -1546,9 +1578,9 @@ function drawSettings() {
       '<button class="iconbtn rt-del" title="루틴 삭제">✕</button></div>' +
       '<div class="rt-days">' + DOW.map((n, k) =>
         '<button class="rt-day" data-d="' + k + '" aria-pressed="' + ((r.days || []).indexOf(k) >= 0) + '">' + n + "</button>").join("") + "</div>" +
-      '<div class="rt-time"><input type="time" step="600" class="rt-s" value="' + toTimeVal(r.start) + '" aria-label="시작">' +
+      '<div class="rt-time">' + timeSelHTML("rts", r.start, "시작", true) +
       "<span>→</span>" +
-      '<input type="time" step="600" class="rt-e" value="' + toTimeVal(r.end) + '" aria-label="종료"></div>' +
+      timeSelHTML("rte", r.end, "종료", true) + "</div>" +
     "</div>").join("")
     : '<div class="empty">아직 루틴이 없습니다. 수업·알바처럼 매주 같은 시간에 반복되는 일정을 추가해 보세요.</div>';
 
@@ -1557,16 +1589,16 @@ function drawSettings() {
     const commit = () => { saveRt(); refreshRoutine(r.id); };
     row.querySelector(".rt-name").onchange = (e) => { r.title = e.target.value.trim() || "루틴"; commit(); drawSettings(); };
     row.querySelector(".rt-tag").onchange = (e) => { r.tagId = e.target.value; commit(); };
-    row.querySelector(".rt-s").onchange = (e) => {
-      const v = fromTimeVal(e.target.value, S.set.dayStart - 1);
-      if (v != null) { r.start = roundTo(v, 10); if (r.end <= r.start) r.end = r.start + 60; }
+    timeSelOn("rts", row, true, () => {
+      const v = timeSelRead("rts", row, true);
+      if (v != null) { r.start = v; if (r.end <= r.start) r.end = r.start + 60; }
       commit(); drawSettings();
-    };
-    row.querySelector(".rt-e").onchange = (e) => {
-      const v = fromTimeVal(e.target.value, r.start);
-      if (v != null && v > r.start) r.end = roundTo(v, 10);
+    });
+    timeSelOn("rte", row, true, () => {
+      const v = timeSelRead("rte", row, true);
+      if (v != null && v > r.start) r.end = v; else { note("종료는 시작보다 늦어야 합니다."); }
       commit(); drawSettings();
-    };
+    });
     row.querySelectorAll(".rt-day").forEach((db) => db.onclick = () => {
       const k = +db.dataset.d;
       r.days = Array.isArray(r.days) ? r.days : [];
@@ -1592,6 +1624,13 @@ function fixWindow() {
   saveSet(); drawSettings();
 }
 function saveSet() { save("settings/app", { tags: S.set.tags, dayStart: S.set.dayStart, dayEnd: S.set.dayEnd }); }
+
+/* 날짜·시간 칸은 작은 아이콘을 정확히 눌러야 열린다. 칸 어디를 눌러도 열리게 한다. */
+addEventListener("click", (e) => {
+  const el = e.target && e.target.closest ? e.target.closest('input[type="date"],input[type="time"]') : null;
+  if (!el || el.disabled || el.readOnly) return;
+  try { el.showPicker(); } catch (x) { }
+}, true);
 
 /* ============================== nav ============================== */
 $("#tabToday").onclick = () => { S.view = "today"; render(); };
