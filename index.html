@@ -1113,7 +1113,7 @@ const HOLD_MS = 450;        /* 폰에서 드래그가 시작되기까지 누르�
         const r = recs().find((x) => x.id === d.id);
         if (r) { r.start = d.ns; r.end = d.ns + d.len; saveDay(); }
         render();
-      } else if (d.moved) { render(); }          /* 끌었다 놓은 건 탭이 아니다 — 같은 자리여도 시트를 열지 않는다 */
+      } else if (d.moved || d.active) { render(); }   /* 길게 눌렀다 뗀 것도 탭이 아니다 */          /* 끌었다 놓은 건 탭이 아니다 — 같은 자리여도 시트를 열지 않는다 */
       else { render(); blockSheet(kind, d.id); }
       return;
     }
