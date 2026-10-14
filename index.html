@@ -156,6 +156,22 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .rt-time{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--muted)}
 .rt-time input{flex:1;min-width:0;background:var(--surface)}
 .rt-note{font-size:11.5px;color:var(--muted);line-height:1.6;margin:10px 0 0}
+/* ---- 매일 반복 ---- */
+.hbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.hchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px 6px 9px;font-size:12.5px;color:var(--muted);touch-action:manipulation;-webkit-user-select:none;user-select:none}
+.hchip .hk{width:15px;height:15px;flex:0 0 auto;border:1.5px solid color-mix(in srgb,var(--c) 45%,var(--line));border-radius:50%;font-size:10px;line-height:12px;text-align:center;color:#fff}
+.hchip.part{color:var(--ink);border-color:color-mix(in srgb,var(--c) 40%,var(--line))}
+.hchip.part .hk{background:color-mix(in srgb,var(--c) 35%,transparent)}
+.hchip.full{color:var(--ink);border-color:var(--c);background:color-mix(in srgb,var(--c) 11%,var(--surface))}
+.hchip.full .hk{background:var(--c);border-color:var(--c)}
+.hchip.full .ht{font-weight:600}
+.hchip .hn{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:11px;color:var(--muted)}
+.hb-row .hb-target{flex:0 0 66px;text-align:center;background:var(--surface)}
+.hb-row .rt-time span{white-space:nowrap}
+.hstat{display:grid;gap:7px}
+.hrow{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:center;font-size:12.5px}
+.hrow .st{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink)}
+.hrow .rt30{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:11px;color:var(--muted);width:62px;text-align:right}
 .nowline{position:absolute;left:46px;right:0;height:0;border-top:1.5px dashed color-mix(in srgb,var(--actual) 70%,transparent);pointer-events:none;z-index:4}
 .nowline::before{content:"";position:absolute;left:-4px;top:-3.5px;width:7px;height:7px;border-radius:50%;background:var(--actual)}
 .hint{font-size:11px;color:var(--muted);padding:7px 13px 0;text-align:center}
@@ -255,6 +271,11 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .cal .cell.tdy{border-color:var(--actual);box-shadow:inset 0 0 0 1px var(--actual)}
 .cal .cell:hover{background:color-mix(in srgb,var(--ink) 6%,var(--surface-2))}
 .cal .dot,.legend b.dotl{width:5px;height:5px;border-radius:50%;background:var(--plan);display:block}
+.cal .gdot{position:absolute;top:4px;right:4px;width:5px;height:5px;border-radius:50%;background:var(--plan)}
+.cal .gdot.ok{background:var(--ok)}
+.cal .hdots{display:flex;gap:3px;align-items:center;height:6px}
+.cal .hdots i{width:5px;height:5px;border-radius:50%;border:1px solid color-mix(in srgb,var(--c) 55%,transparent)}
+.cal .hdots i.on{background:var(--c);border-color:var(--c)}
 .cal .dot.ok{background:var(--ok)}
 .legend b.dotl{display:inline-block;vertical-align:0}
 .wdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-top:4px}
@@ -368,6 +389,8 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
       <button class="chip-btn" id="fillBtn" hidden title="지나간 계획을 실제 기록으로 한 번에 옮깁니다">계획대로 채우기</button>
       <button class="chip-btn" id="goToday">오늘</button>
     </div>
+
+    <div class="hbar" id="habitBar" hidden></div>
 
     <div class="grid2">
       <div>
@@ -621,6 +644,7 @@ const S = {
   needScroll: true,
   rt: { items: [] },
   pane: 0,
+  hb: { items: [] },
   ov: { mode: "month", anchor: keyOf(new Date()), m: { items: [] }, w: { items: [] }, weekSum: {}, unsubs: [], subKey: "" }
 };
 function emptyDay(k) { return { date: k, tasks: [], plans: [], logs: [], rApplied: [] }; }
@@ -655,7 +679,7 @@ function refreshRoutine(rid) {
   saveDay(); applyRoutines(); render();
 }
 function day() { if (!S.day || S.day.date !== S.dateKey) S.day = emptyDay(S.dateKey); return S.day; }
-function saveDay() { const d = day(); d.updatedAt = Date.now(); save("days/" + d.date, d); }
+function saveDay() { const d = day(); d.updatedAt = Date.now(); hbDayCache = null; save("days/" + d.date, d); }
 function tag(id) { return S.set.tags.find((t) => t.id === id) || { id: "etc", name: "기타", color: "#7A7480" }; }
 function task(id) { return day().tasks.find((t) => t.id === id) || null; }
 function labelOf(o) { const t = o.taskId ? task(o.taskId) : null; return t ? t.title : (o.label || "(제목 없음)"); }
@@ -689,6 +713,11 @@ render();
   watch("settings/routines", (d) => {
     S.rt = { items: Array.isArray(d && d.items) ? d.items : [] };
     applyRoutines(); render();
+  });
+  watch("settings/habits", (d) => {
+    S.hb = { items: Array.isArray(d && d.items) ? d.items : [], seeded: S.hb.seeded };
+    if (!d) setTimeout(() => { if (!(S.hb.items || []).length) seedHabits(); }, 1200);
+    render();
   });
   watch("state/running", (d) => { S.running = d && (d.startMs || d.paused) ? d : null; render(); });
   openDay(S.dateKey);
@@ -725,7 +754,7 @@ function render() {
   $("#tabStats").setAttribute("aria-selected", S.view === "stats");
   $("#tabOver").setAttribute("aria-selected", S.view === "over");
   $("#tabSet").setAttribute("aria-selected", S.view === "set");
-  if (S.view === "today") { drawDate(); drawTagSelect(); drawTasks(); drawTimeline(); drawNow(); }
+  if (S.view === "today") { drawDate(); drawHabits(); drawTagSelect(); drawTasks(); drawTimeline(); drawNow(); }
   if (S.view === "set") drawSettings();
   drawRun();
 }
@@ -1179,6 +1208,127 @@ function blockSheet(kind, id, preset) {
   };
 }
 
+/* ============================== 매일 반복 ==============================
+   요일 루틴이 "몇 시에"라면 이쪽은 "몇 번". 시간표가 아니라 횟수·여부라서
+   타임라인과 섞지 않고 따로 센다. 설정은 settings/habits, 그날의 숫자는
+   날짜 문서의 habits:{id:n} 한 줄에만 남으므로 백업에도 그대로 따라간다. */
+const HABIT_SEED = [
+  { title: "신문기사 읽기", target: 10, tagId: "etc" },
+  { title: "듀오링고", target: 1, tagId: "etc" },
+  { title: "운동", target: 1, tagId: "fit" }
+];
+function saveHb() { save("settings/habits", { items: S.hb.items }); }
+function hbTarget(h) { return Math.max(1, Math.round(+h.target || 1)); }
+function hbOn(k) {                       /* 그 날 해당되는 항목만 */
+  const dow = parseKey(k).getDay();
+  return (S.hb.items || []).filter((h) => h && !h.off && (!Array.isArray(h.days) || !h.days.length || h.days.indexOf(dow) >= 0));
+}
+function hbCount(rec, id) { return Math.max(0, Math.round((rec && rec.habits && rec.habits[id]) || 0)); }
+function hbSet(id, n) {
+  const d = day();
+  if (!d.habits || typeof d.habits !== "object") d.habits = {};
+  if (n > 0) d.habits[id] = n; else delete d.habits[id];
+  saveDay();
+}
+/* 그 날 몇 개를 끝냈는지 — 달력 점과 통계가 같은 셈을 쓴다. */
+function hbDone(rec, list) { return list.filter((h) => hbCount(rec, h.id) >= hbTarget(h)).length; }
+/* 처음 쓰는 사람에게는 예시 세 개를 깔아 준다. 한 번 지우면 다시 생기지 않는다. */
+function seedHabits() {
+  if (readOnly || S.hb.seeded) return;
+  try { if (localStorage.getItem("pa:hb-seeded")) return; } catch (e) { }
+  S.hb.items = HABIT_SEED.map((h) => ({ id: uid(), title: h.title, target: h.target, tagId: h.tagId, days: [0, 1, 2, 3, 4, 5, 6] }));
+  S.hb.seeded = true;
+  try { localStorage.setItem("pa:hb-seeded", "1"); } catch (e) { }
+  saveHb(); render();
+}
+
+function drawHabits() {
+  const bar = $("#habitBar"), list = hbOn(S.dateKey), d = day();
+  if (!list.length) { bar.hidden = true; bar.innerHTML = ""; return; }
+  bar.hidden = false;
+  bar.innerHTML = list.map((h) => {
+    const t = hbTarget(h), n = hbCount(d, h.id), full = n >= t, c = tag(h.tagId).color;
+    return '<button class="hchip' + (full ? " full" : n ? " part" : "") + '" data-id="' + esc(h.id) + '" style="--c:' + esc(c) + '"' +
+      ' title="' + esc(h.title + " · 눌러서 +1" + (t > 1 ? " (목표 " + t + ")" : "") + " · 길게 누르면 지움") + '">' +
+      '<span class="hk">' + (full ? "✓" : "") + "</span>" +
+      '<span class="ht">' + esc(h.title) + "</span>" +
+      (t > 1 ? '<span class="hn">' + n + "/" + t + "</span>" : "") + "</button>";
+  }).join("");
+  bar.querySelectorAll(".hchip").forEach((b) => {
+    const id = b.getAttribute("data-id"), h = (S.hb.items || []).find((x) => x.id === id);
+    if (!h) return;
+    let held = false, timer = null;
+    const clear = () => { if (timer) clearTimeout(timer); timer = null; };
+    const bump = () => {
+      if (readOnly) return;
+      const t = hbTarget(h), n = hbCount(day(), id);
+      hbSet(id, n >= t ? 0 : n + 1);          /* 다 채운 뒤 한 번 더 누르면 0으로 */
+      drawHabits();
+    };
+    b.onclick = () => { if (held) { held = false; return; } bump(); };
+    b.onpointerdown = () => { clear(); timer = setTimeout(() => { held = true; if (!readOnly) { hbSet(id, 0); drawHabits(); } }, 550); };
+    ["pointerup", "pointerleave", "pointercancel"].forEach((e) => b.addEventListener(e, clear));
+  });
+}
+
+/* 설정 탭 — 항목 편집 */
+function drawHabitSettings() {
+  const hl = $("#hbList");
+  if (!hl) return;
+  hl.innerHTML = (S.hb.items || []).length ? S.hb.items.map((h, i) =>
+    '<div class="rt-row hb-row" data-i="' + i + '">' +
+      '<div class="rt-top"><input type="text" class="hb-name" maxlength="40" value="' + esc(h.title || "") + '" placeholder="예: 신문기사 읽기" aria-label="이름">' +
+      '<select class="hb-tag" aria-label="태그">' + tagOptions(h.tagId) + "</select>" +
+      '<button class="iconbtn hb-del" title="삭제">✕</button></div>' +
+      '<div class="rt-days">' + DOW.map((n, k) =>
+        '<button class="hb-day" data-d="' + k + '" aria-pressed="' + ((Array.isArray(h.days) ? h.days : [0, 1, 2, 3, 4, 5, 6]).indexOf(k) >= 0) + '">' + n + "</button>").join("") + "</div>" +
+      '<div class="rt-time"><span>하루 목표</span>' +
+      '<input type="number" class="hb-target" min="1" max="99" step="1" value="' + hbTarget(h) + '" aria-label="하루 목표 횟수">' +
+      "<span>" + (hbTarget(h) > 1 ? "번" : "번 (1이면 체크만)") + "</span></div>" +
+    "</div>").join("")
+    : '<div class="empty">아직 없습니다. 신문기사 읽기, 듀오링고처럼 <b style="display:inline">매일 몇 번</b> 하는 일을 넣어 보세요.</div>';
+
+  hl.querySelectorAll(".hb-row").forEach((row) => {
+    const i = +row.dataset.i, h = S.hb.items[i];
+    const commit = () => { saveHb(); render(); };
+    row.querySelector(".hb-name").onchange = (e) => { h.title = e.target.value.trim() || "반복"; commit(); drawSettings(); };
+    row.querySelector(".hb-tag").onchange = (e) => { h.tagId = e.target.value; commit(); };
+    row.querySelector(".hb-target").onchange = (e) => {
+      h.target = clamp(Math.round(+e.target.value || 1), 1, 99);
+      commit(); drawSettings();
+    };
+    row.querySelector(".hb-del").onclick = () => { S.hb.items.splice(i, 1); commit(); drawSettings(); };
+    row.querySelectorAll(".hb-day").forEach((db) => db.onclick = () => {
+      const k = +db.dataset.d;
+      h.days = Array.isArray(h.days) ? h.days : [0, 1, 2, 3, 4, 5, 6];
+      const at = h.days.indexOf(k);
+      if (at >= 0) h.days.splice(at, 1); else h.days.push(k);
+      db.setAttribute("aria-pressed", at < 0);
+      commit();
+    });
+  });
+  $("#addHb").onclick = () => {
+    S.hb.items.push({ id: uid(), title: "새 반복", target: 1, tagId: S.set.tags[0].id, days: [0, 1, 2, 3, 4, 5, 6] });
+    saveHb(); drawSettings();
+  };
+}
+
+/* 통계 탭 — 연속 일수. 오늘 아직 안 한 건 끊긴 걸로 치지 않는다. */
+function habitStreaks(map, todayKey) {
+  return (S.hb.items || []).filter((h) => h && !h.off).map((h) => {
+    const t = hbTarget(h), days = Array.isArray(h.days) && h.days.length ? h.days : [0, 1, 2, 3, 4, 5, 6];
+    let streak = 0, hit = 0, due = 0, broke = false;
+    for (let i = 0; i < 60; i++) {
+      const k = shiftKey(todayKey, -i), rec = map[k];
+      if (days.indexOf(parseKey(k).getDay()) < 0) continue;      /* 쉬는 요일은 건너뛴다 */
+      const ok = hbCount(rec, h.id) >= t;
+      if (i < 30) { due++; if (ok) hit++; }
+      if (!broke) { if (ok) streak++; else if (i > 0) broke = true; else if (i === 0) continue; }
+    }
+    return { h: h, streak: streak, hit: hit, due: due };
+  });
+}
+
 /* ============================== stats ============================== */
 function overlap(a1, a2, b1, b2) { return Math.max(0, Math.min(a2, b2) - Math.max(a1, b1)); }
 function dayStats(d) {
@@ -1206,7 +1356,8 @@ async function drawStats() {
   const host = $("#viewStats");
   host.innerHTML = '<div class="empty">불러오는 중…</div>';
   const rows = await readDays(70);
-  const map = {}; rows.forEach((r) => { if (r && r.date) map[r.date] = dayStats(r); });
+  const map = {}, raw = {};
+  rows.forEach((r) => { if (r && r.date) { map[r.date] = dayStats(r); raw[r.date] = r; } });
   const todayKey = keyOf(new Date());
   const t = map[todayKey] || dayStats(emptyDay(todayKey));
 
@@ -1256,7 +1407,20 @@ async function drawStats() {
         const r = d.rate, c = r == null ? "var(--surface-2)" : "color-mix(in srgb,var(--ok) " + Math.round(18 + r * 78) + "%,var(--surface-2))";
         return '<i style="background:' + c + '" title="' + d.date + " · " + (r == null ? "기록 없음" : Math.round(r * 100) + "%") + '"></i>';
       }).join("") +
-    '</div><div class="legend"><span>왼쪽이 30일 전, 오른쪽이 오늘 · 진할수록 달성률이 높습니다</span></div></div></div>';
+    '</div><div class="legend"><span>왼쪽이 30일 전, 오른쪽이 오늘 · 진할수록 달성률이 높습니다</span></div></div></div>' +
+    habitSection();
+
+  function habitSection() {
+    const st = habitStreaks(raw, todayKey);
+    if (!st.length) return "";
+    return '<div class="sec-t">매일 반복</div>' +
+      '<div class="card"><div class="card-b"><div class="hstat">' +
+        st.map((x) =>
+          '<div class="hrow"><span class="tag" style="--c:' + esc(tag(x.h.tagId).color) + '">' + esc(x.h.title) + "</span>" +
+          '<span class="st">' + (x.streak ? x.streak + "일 연속" : "끊김") + "</span>" +
+          '<span class="rt30">' + (x.due ? Math.round(x.hit / x.due * 100) + "%" : "—") + "</span></div>").join("") +
+      '</div><div class="legend"><span>오른쪽은 최근 30일 중 해낸 비율 · 쉬는 요일은 빼고 셉니다</span></div></div></div>';
+  }
 
   function card(k, v, s, ratio, c) {
     return '<div class="stat"><div class="k">' + k + '</div><div class="v">' + v + '</div><div class="s">' + s + "</div>" +
@@ -1310,6 +1474,16 @@ function ovWatch() {
   loadWeekSummary();
 }
 /* 월간 화면에서 각 주에 목표가 몇 개 있는지 — 읽기 한 번씩, 구독은 하지 않는다. */
+/* 달력 점을 그리려면 그 달의 날짜 기록이 필요하다. 한 번 읽고 들고 있는다. */
+let hbDayCache = null;
+async function loadHabitDays(force) {
+  if (!(S.hb.items || []).length) return;
+  if (!force && hbDayCache && Date.now() - hbDayCache.at < 90000) return;
+  const rows = await readColl("days", "date", 400), map = {};
+  rows.forEach((r) => { if (r && r.date && r.habits) map[r.date] = r; });
+  hbDayCache = { at: Date.now(), map: map };
+  if (S.view === "over" && S.ov.mode === "month") drawOver();
+}
 async function loadWeekSummary() {
   if (S.ov.mode !== "month") return;
   const mk = S.ov.anchor.slice(0, 7), ws = weeksOfMonth(S.ov.anchor), sum = {};
@@ -1357,7 +1531,7 @@ async function drawOver(force) {
     "</div>" +
     (mode === "month" ? monthBody() : weekBody());
 
-  $("#ovMonth").onclick = () => { S.ov.mode = "month"; drawOver(); loadWeekSummary(); };
+  $("#ovMonth").onclick = () => { S.ov.mode = "month"; drawOver(); loadWeekSummary(); loadHabitDays(); };
   $("#ovWeek").onclick = () => { S.ov.mode = "week"; drawOver(); };
   $("#ovPrev").onclick = () => { S.ov.anchor = ovShift(mode, anchor, -1); drawOver(); };
   $("#ovNext").onclick = () => { S.ov.anchor = ovShift(mode, anchor, 1); drawOver(); };
@@ -1465,11 +1639,17 @@ async function drawOver(force) {
     const lead = (parseKey(first).getDay() + 6) % 7;
     const cells = [];
     for (let i = 0; i < lead; i++) cells.push('<div class="cell void"></div>');
+    const hbMap = (hbDayCache && hbDayCache.map) || {};
     days.forEach((k) => {
-      const dd = parseKey(k), hit = dueM[k] || [];
-      cells.push('<button class="cell' + (k === todayKey ? " tdy" : "") + '" data-go="' + k + '" title="' + k + (hit.length ? " · " + hit.map((g) => g.title).join(", ") : "") + '">' +
+      const dd = parseKey(k), hit = dueM[k] || [], hbs = hbOn(k).slice(0, 4), rec = hbMap[k];
+      const tip = k + (hbs.length ? " · " + hbs.map((x) => x.title + " " + hbCount(rec, x.id) + "/" + hbTarget(x)).join(", ") : "") +
+        (hit.length ? " · 목표: " + hit.map((g) => g.title).join(", ") : "");
+      cells.push('<button class="cell' + (k === todayKey ? " tdy" : "") + '" data-go="' + k + '" title="' + esc(tip) + '">' +
+        (hit.length ? '<span class="gdot' + (hit.every((g) => g.done) ? " ok" : "") + '"></span>' : "") +
         '<span class="dn">' + dd.getDate() + "</span>" +
-        (hit.length ? '<span class="dot' + (hit.every((g) => g.done) ? " ok" : "") + '"></span>' : "") + "</button>");
+        (hbs.length ? '<span class="hdots">' + hbs.map((x) =>
+          '<i class="' + (hbCount(rec, x.id) >= hbTarget(x) ? "on" : "") + '" style="--c:' + esc(tag(x.tagId).color) + '"></i>').join("") + "</span>" : "") +
+        "</button>");
     });
     const ws = weeksOfMonth(anchor), sum = S.ov.weekSum || {};
     return goalList("m", "이번 달 목표", "한 달 동안 끝내고 싶은 걸 크게 적어 두세요. 날짜를 붙이면 아래 달력에 표시됩니다.", first, last) +
@@ -1487,7 +1667,9 @@ async function drawOver(force) {
       '<div class="card"><div class="card-b"><div class="cal">' +
         ["월", "화", "수", "목", "금", "토", "일"].map((x) => '<div class="dh">' + x + "</div>").join("") +
         cells.join("") +
-      '</div><div class="legend"><span>날짜를 누르면 그 날의 할일·타임라인으로 갑니다</span><span><b class="dotl"></b>목표 날짜</span></div></div></div>';
+      '</div><div class="legend"><span>날짜를 누르면 그 날의 할일·타임라인으로 갑니다</span>' +
+        ((S.hb.items || []).length ? '<span>아래 점은 매일 반복 · 채워지면 그 날 다 한 것</span>' : "") +
+        '<span><b class="dotl"></b>목표 날짜</span></div></div></div>';
   }
 
   function weekBody() {
@@ -1535,6 +1717,12 @@ function drawSettings() {
       '<button class="btn ghost" id="addRt" style="margin-top:10px;width:100%">루틴 추가</button>' +
       '<p class="rt-note">시간표·아르바이트처럼 요일마다 반복되는 일정입니다. 해당 요일이 되면 <b>계획</b> 칸에 저절로 들어가고(↻ 표시), 실제 칸에는 들어가지 않습니다.<br>' +
       '오늘과 앞으로의 날짜에만 적용되며, 지난 기록은 건드리지 않습니다. 하루치 블록을 지우면 그날엔 다시 생기지 않습니다.</p>' +
+    "</div></div>" +
+    '<div class="sec-t">매일 반복</div>' +
+    '<div class="card"><div class="card-b"><div class="taglist" id="hbList"></div>' +
+      '<button class="btn ghost" id="addHb" style="margin-top:10px;width:100%">반복 추가</button>' +
+      '<p class="rt-note">시간이 아니라 <b>횟수</b>로 세는 일입니다. 요일 루틴과 달리 타임라인에는 들어가지 않고, 오늘 화면 위쪽 띠에서 눌러 세면 됩니다.<br>' +
+      '하루 목표가 1이면 체크, 2 이상이면 누를 때마다 1씩 오르고 다 채운 뒤 한 번 더 누르면 0으로 돌아갑니다. 길게 누르면 바로 지워집니다.</p>' +
     "</div></div>" +
     '<div class="sec-t">데이터</div>' +
     '<div class="card"><div class="card-b"><div style="font-size:12.5px;color:var(--muted);line-height:1.65">' +
@@ -1616,6 +1804,7 @@ function drawSettings() {
     S.rt.items.push({ id: "r" + uid(), title: "새 루틴", tagId: S.set.tags[0].id, days: [1, 2, 3, 4, 5], start: 540, end: 600 });
     saveRt(); applyRoutines(); drawSettings();
   };
+  drawHabitSettings();
   if (readOnly) host.querySelectorAll("input,select,button").forEach((e) => e.disabled = true);
 }
 function fixWindow() {
@@ -1635,14 +1824,14 @@ addEventListener("click", (e) => {
 /* ============================== nav ============================== */
 $("#tabToday").onclick = () => { S.view = "today"; render(); };
 $("#tabStats").onclick = () => { S.view = "stats"; render(); drawStats(); };
-$("#tabOver").onclick = () => { S.view = "over"; S.ov.anchor = keyOf(new Date()); render(); drawOver(); loadWeekSummary(); };
+$("#tabOver").onclick = () => { S.view = "over"; S.ov.anchor = keyOf(new Date()); render(); drawOver(); loadWeekSummary(); loadHabitDays(true); };
 $("#tabSet").onclick = () => { S.view = "set"; render(); };
 $("#prevDay").onclick = () => openDay(shiftKey(S.dateKey, -1));
 $("#nextDay").onclick = () => openDay(shiftKey(S.dateKey, 1));
 $("#goToday").onclick = () => openDay(keyOf(new Date()));
 try {
   const h = (location.hash || "").replace("#", "");
-  if (h === "stats" || h === "set" || h === "over") { S.view = h; render(); if (h === "stats") drawStats(); if (h === "over") { drawOver(); loadWeekSummary(); } }
+  if (h === "stats" || h === "set" || h === "over") { S.view = h; render(); if (h === "stats") drawStats(); if (h === "over") { drawOver(); loadWeekSummary(); loadHabitDays(true); } }
 } catch (e) { }
 </script>
 
