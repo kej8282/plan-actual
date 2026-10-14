@@ -155,6 +155,13 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 /* phone: one track at a time, swiped left and right */
 .panes{display:contents}
 .pane-tabs{display:none}
+@media (max-width:560px){
+  /* four tabs: give them the row and drop the subtitle */
+  .brand i{display:none}
+  .tabs button{padding:5px 9px;font-size:12.5px}
+  .ov-head .ov-range{width:100%;order:3}
+  .ov-head .ov-nav{order:2}
+}
 @media (max-width:899px){
   .tl-head{display:none}
   .pane-tabs{display:flex;gap:6px;align-items:center;padding:10px 13px 0}
@@ -194,6 +201,76 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .legend{display:flex;gap:12px;font-size:11px;color:var(--muted);margin-top:9px;flex-wrap:wrap}
 .legend b{display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:-1px;margin-right:4px}
 .sec-t{font-size:13px;font-weight:600;margin:20px 0 8px}
+/* ---- goals (월간 · 주간) ---- */
+.ov-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.ov-seg{display:flex;gap:2px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:3px}
+.ov-seg button{border:0;background:transparent;border-radius:999px;padding:5px 14px;font-size:13px;font-weight:500;color:var(--muted)}
+.ov-seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.ov-range{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;margin-left:2px}
+.ov-nav{display:flex;gap:4px;margin-left:auto}
+.ov-nav .nav{width:30px;height:30px}
+.pc{font-family:var(--font-num);font-size:11px;color:var(--muted);font-weight:500}
+.g-count{margin-left:auto;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--muted)}
+.goals{list-style:none;display:grid;gap:4px}
+.goals li{display:grid;grid-template-columns:24px 1fr auto 28px;gap:7px;align-items:center}
+.goals .g-adddue{border:1px dashed var(--line);background:transparent;border-radius:999px;padding:3px 9px;font-size:11px;color:var(--muted);white-space:nowrap}
+.goals .g-adddue:hover{border-style:solid;color:var(--ink)}
+.goals li.done .g-adddue{opacity:.45}
+.goals .g-chk{width:22px;height:22px;flex:0 0 auto;border:1.5px solid var(--line);background:var(--surface-2);border-radius:6px;font-size:13px;line-height:1;color:var(--ok);font-weight:700}
+.goals .g-chk[aria-pressed="true"]{background:color-mix(in srgb,var(--ok) 18%,transparent);border-color:var(--ok)}
+.goals .g-title{border:1px solid transparent;background:transparent;border-radius:var(--radius);padding:5px 6px;font-size:14px;min-width:0;width:100%;color:var(--ink)}
+.goals .g-title:hover{border-color:var(--line-soft)}
+.goals .g-title:focus{border-color:var(--line);background:var(--surface-2)}
+.goals .g-due{border:1px solid transparent;background:transparent;border-radius:var(--radius);padding:4px 5px;font-family:var(--font-num);font-size:11.5px;color:var(--muted);width:122px}
+.goals .g-due:hover{border-color:var(--line-soft)}
+.goals .g-due.late{color:var(--actual)}
+.goals li.done .g-title{color:var(--muted);text-decoration:line-through}
+.goals.ro li{grid-template-columns:16px 1fr auto}
+.goals .g-mk{font-family:var(--font-num);color:var(--ok);text-align:center}
+.goals .g-ro{font-size:13.5px}
+.goals li.done .g-ro{color:var(--muted);text-decoration:line-through}
+.goals .n{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:11px;color:var(--muted)}
+.g-add-row{display:flex;gap:6px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft)}
+.g-add-row .g-new{flex:1;min-width:0}
+.g-add-row .g-newdue{width:132px;font-family:var(--font-num);font-size:12px}
+.lnk{border:0;background:transparent;padding:0;color:var(--actual);font-size:11px;text-decoration:underline}
+.wk-rows{display:grid;gap:5px}
+.wk-row{display:grid;grid-template-columns:1fr auto 14px;gap:9px;align-items:center;width:100%;text-align:left;border:1px solid var(--line-soft);background:var(--surface-2);border-radius:9px;padding:9px 11px;font-size:13px;color:var(--ink)}
+.wk-row:hover{border-color:var(--line)}
+.wk-row.cur{border-color:var(--actual)}
+.wk-row .wn{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--muted)}
+.wk-row .wc{color:var(--muted)}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-top:4px}
+.cal .dh{font-family:var(--font-num);font-size:10px;color:var(--muted);text-align:center;padding-bottom:2px}
+.cal .cell{position:relative;min-width:0;width:100%;height:56px;border:1px solid var(--line-soft);border-radius:8px;background:var(--surface-2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.cal .cell.void{border-color:transparent;background:transparent}
+.cal .cell .dn{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink);line-height:1}
+.cal .cell.tdy{border-color:var(--actual);box-shadow:inset 0 0 0 1px var(--actual)}
+.cal .cell:hover{background:color-mix(in srgb,var(--ink) 6%,var(--surface-2))}
+.cal .dot,.legend b.dotl{width:5px;height:5px;border-radius:50%;background:var(--plan);display:block}
+.cal .dot.ok{background:var(--ok)}
+.legend b.dotl{display:inline-block;vertical-align:0}
+.wdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-top:4px}
+.wday{display:flex;flex-direction:column;align-items:center;gap:3px;border:1px solid var(--line-soft);background:var(--surface-2);border-radius:9px;padding:9px 0 7px}
+.wday:hover{background:color-mix(in srgb,var(--ink) 6%,var(--surface-2))}
+.wday.tdy{border-color:var(--actual);box-shadow:inset 0 0 0 1px var(--actual)}
+.wday .wd{font-family:var(--font-num);font-size:10px;color:var(--muted)}
+.wday .dn{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:15px;font-weight:600}
+.wday .gl-mini{display:flex;gap:2px;height:6px;align-items:center}
+.wday .gl-mini i{width:5px;height:5px;border-radius:50%;background:var(--plan)}
+.wday .gl-mini i.ok{background:var(--ok)}
+@media (max-width:560px){
+  .goals li{grid-template-columns:24px minmax(0,1fr) 28px;grid-template-areas:"c t d" "c u u";row-gap:2px}
+  .goals .g-chk{grid-area:c}.goals .g-title{grid-area:t}.goals .g-del{grid-area:d}
+  .goals .g-due,.goals .g-adddue{grid-area:u;width:auto;justify-self:start}
+  .goals.ro li{grid-template-columns:16px minmax(0,1fr) auto;grid-template-areas:none}
+  .g-add-row{flex-wrap:wrap}.g-add-row .g-new{flex:1 0 100%}
+  .g-add-row .g-newdue{flex:1;min-width:0}
+  .cal{gap:4px}.cal .cell{height:auto;aspect-ratio:1}
+  .cal .cell .dn{font-size:12px}
+  .wk-row{font-size:12.5px;padding:9px 10px;gap:6px}
+  .wdays{gap:4px}.wday .dn{font-size:14px}
+}
 
 /* ---------- settings ---------- */
 .set-row{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line-soft)}
@@ -264,6 +341,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
     <nav class="tabs" role="tablist">
       <button id="tabToday" role="tab" aria-selected="true">오늘</button>
       <button id="tabStats" role="tab" aria-selected="false">통계</button>
+      <button id="tabOver" role="tab" aria-selected="false">목표</button>
       <button id="tabSet" role="tab" aria-selected="false">설정</button>
     </nav>
   </div>
@@ -330,6 +408,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
   </section>
 
   <section id="viewStats" hidden></section>
+  <section id="viewOver" hidden></section>
   <section id="viewSet" hidden></section>
 </main>
 
@@ -389,7 +468,7 @@ let DB = null, canWrite = true, readOnly = false;
 const LS = {
   read(p) { try { const r = localStorage.getItem("pa:" + p); return r ? JSON.parse(r) : null; } catch (e) { return null; } },
   write(p, v) { try { localStorage.setItem("pa:" + p, JSON.stringify(v)); } catch (e) { } },
-  keys() { const o = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith("pa:days/")) o.push(k.slice(8)); } } catch (e) { } return o; }
+  keys(pfx) { const p = "pa:" + (pfx || ""), o = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(p)) o.push(k.slice(3)); } } catch (e) { } return o; }
 };
 
 const subs = new Map();   // path -> callback
@@ -442,13 +521,14 @@ async function readOnce(path) {
   if (!DB) return LS.read(path);
   try { const s = await DB.doc(path).get(); return s.exists ? s.data() : null; } catch (e) { return null; }
 }
-async function readDays(limit) {
-  if (!DB) return LS.keys().map((k) => LS.read("days/" + k)).filter(Boolean);
+async function readColl(name, field, limit) {
+  if (!DB) return LS.keys(name + "/").map((p) => LS.read(p)).filter(Boolean);
   try {
-    const s = await DB.collection("days").orderBy("date", "desc").limit(limit || 70).get();
+    const s = await DB.collection(name).orderBy(field, "desc").limit(limit || 70).get();
     return s.docs.map((d) => d.data()).filter(Boolean);
   } catch (e) { return []; }
 }
+function readDays(limit) { return readColl("days", "date", limit); }
 /* fb.js calls window.__fbResolve(api); if it never loads (opened as a plain file), fall back to local mode. */
 let FB = null;
 const fbReady = new Promise((res) => {
@@ -475,7 +555,7 @@ function askLogin(fb) {
 }
 function exportAll() {
   readDays(100000).then(async (days) => {
-    const out = { app: "plan-actual", v: 1, exportedAt: new Date().toISOString(), days: days, settings: await readOnce("settings/app"), routines: await readOnce("settings/routines") };
+    const out = { app: "plan-actual", v: 2, exportedAt: new Date().toISOString(), days: days, goals: await readColl("goals", "id", 2000), settings: await readOnce("settings/app"), routines: await readOnce("settings/routines") };
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: "application/json" }));
     a.download = "plan-actual-" + keyOf(new Date()) + ".json";
@@ -493,6 +573,7 @@ function importAll(file) {
       o.days.forEach((d) => { if (d && d.date) save("days/" + d.date, d); });
       if (o.settings) save("settings/app", o.settings);
       if (o.routines) save("settings/routines", o.routines);
+      if (Array.isArray(o.goals)) o.goals.forEach((g) => { if (g && g.id) save("goals/" + g.id, g); });
       setTimeout(() => location.reload(), 1500);
     } catch (e) { alert("가져올 수 없는 파일입니다."); }
   };
@@ -511,7 +592,8 @@ const S = {
   unsubDay: null,
   needScroll: true,
   rt: { items: [] },
-  pane: 0
+  pane: 0,
+  ov: { mode: "month", anchor: keyOf(new Date()), m: { items: [] }, w: { items: [] }, weekSum: {}, unsubs: [], subKey: "" }
 };
 function emptyDay(k) { return { date: k, tasks: [], plans: [], logs: [], rApplied: [] }; }
 
@@ -609,9 +691,11 @@ function openDay(k) {
 function render() {
   $("#viewToday").hidden = S.view !== "today";
   $("#viewStats").hidden = S.view !== "stats";
+  $("#viewOver").hidden = S.view !== "over";
   $("#viewSet").hidden = S.view !== "set";
   $("#tabToday").setAttribute("aria-selected", S.view === "today");
   $("#tabStats").setAttribute("aria-selected", S.view === "stats");
+  $("#tabOver").setAttribute("aria-selected", S.view === "over");
   $("#tabSet").setAttribute("aria-selected", S.view === "set");
   if (S.view === "today") { drawDate(); drawTagSelect(); drawTasks(); drawTimeline(); drawNow(); }
   if (S.view === "set") drawSettings();
@@ -1148,6 +1232,259 @@ async function drawStats() {
   }
 }
 
+/* ============================== goals (월간 · 주간) ==============================
+   오늘 탭은 10분 단위로 하루를 다루고, 통계 탭은 그 결과를 숫자로 본다.
+   이 탭은 그 위에 얹는 큰 틀이다: 한 달에 몇 가지, 한 주에 몇 가지 목표를 적고
+   끝낼 때 체크한다. 날짜를 붙이면 그 주의 날짜 줄에 같이 보인다.
+   저장 경로: goals/m-YYYY-MM (월간), goals/w-YYYY-MM-DD (그 주의 월요일). */
+const MONTH_LIMIT = 40, WEEK_LIMIT = 40;
+function weekStart(k) { const d = parseKey(k); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return keyOf(d); }   /* 주는 월→일 */
+function monthDays(k) {
+  const d = parseKey(k), y = d.getFullYear(), m = d.getMonth(), n = new Date(y, m + 1, 0).getDate(), o = [];
+  for (let i = 1; i <= n; i++) o.push(keyOf(new Date(y, m, i)));
+  return o;
+}
+function monthId(k) { return "m-" + k.slice(0, 7); }
+function weekId(k) { return "w-" + weekStart(k); }
+function ovShift(mode, anchor, n) {
+  if (mode === "week") return shiftKey(weekStart(anchor), n * 7);
+  const d = parseKey(anchor); return keyOf(new Date(d.getFullYear(), d.getMonth() + n, 1));
+}
+function monthLabel(k) { const d = parseKey(k); return d.getFullYear() + "년 " + (d.getMonth() + 1) + "월"; }
+function weekLabel(k) {
+  const s = parseKey(weekStart(k)), e = parseKey(shiftKey(weekStart(k), 6));
+  const sm = s.getMonth() + 1, em = e.getMonth() + 1;
+  return sm + "월 " + s.getDate() + "일 – " + (sm === em ? "" : em + "월 ") + e.getDate() + "일";
+}
+/* 그 달에 걸친 주들의 월요일 */
+function weeksOfMonth(k) {
+  const days = monthDays(k), out = [];
+  days.forEach((d) => { const w = weekStart(d); if (out.indexOf(w) < 0) out.push(w); });
+  return out;
+}
+
+function goalDocs() { return { m: "goals/" + monthId(S.ov.anchor), w: "goals/" + weekId(S.ov.anchor) }; }
+/* 열려 있는 기간의 두 문서만 구독한다. 기간을 넘기면 갈아탄다. */
+function ovWatch() {
+  const want = goalDocs();
+  if (S.ov.subKey === want.m + "|" + want.w) return;
+  S.ov.subKey = want.m + "|" + want.w;
+  (S.ov.unsubs || []).forEach((u) => { try { u(); } catch (e) { } });
+  S.ov.m = { items: [] }; S.ov.w = { items: [] }; S.ov.loaded = false;
+  S.ov.unsubs = [
+    watch(want.m, (d) => { S.ov.m = { items: (d && Array.isArray(d.items)) ? d.items : [] }; S.ov.loaded = true; if (S.view === "over") drawOver(); }),
+    watch(want.w, (d) => { S.ov.w = { items: (d && Array.isArray(d.items)) ? d.items : [] }; S.ov.loaded = true; if (S.view === "over") drawOver(); })
+  ];
+  loadWeekSummary();
+}
+/* 월간 화면에서 각 주에 목표가 몇 개 있는지 — 읽기 한 번씩, 구독은 하지 않는다. */
+async function loadWeekSummary() {
+  if (S.ov.mode !== "month") return;
+  const mk = S.ov.anchor.slice(0, 7), ws = weeksOfMonth(S.ov.anchor), sum = {};
+  for (const w of ws) {
+    const d = await readOnce("goals/w-" + w);
+    const items = (d && Array.isArray(d.items)) ? d.items : [];
+    sum[w] = { n: items.length, done: items.filter((x) => x.done).length };
+  }
+  if (S.ov.anchor.slice(0, 7) !== mk) return;
+  S.ov.weekSum = sum;
+  if (S.view === "over" && S.ov.mode === "month") drawOver();
+}
+function goalsOf(which) { return (which === "m" ? S.ov.m : S.ov.w).items; }
+function saveGoals(which) {
+  const p = goalDocs()[which];
+  save(p, { id: p.slice(6), items: goalsOf(which) });
+  if (which === "w") { const w = weekStart(S.ov.anchor); S.ov.weekSum = Object.assign({}, S.ov.weekSum, { [w]: { n: goalsOf("w").length, done: goalsOf("w").filter((x) => x.done).length } }); }
+}
+function addGoal(which, title, due) {
+  title = (title || "").trim(); if (!title) return false;
+  const list = goalsOf(which);
+  if (list.length >= (which === "m" ? MONTH_LIMIT : WEEK_LIMIT)) { note("목표는 한 기간에 " + MONTH_LIMIT + "개까지입니다."); return false; }
+  list.push({ id: uid(), title: title.slice(0, 120), done: false, due: due || null, at: Date.now() });
+  saveGoals(which); return true;
+}
+
+async function drawOver(force) {
+  ovWatch();
+  const host = $("#viewOver"), mode = S.ov.mode, anchor = S.ov.anchor, todayKey = keyOf(new Date());
+  const isNow = mode === "week" ? weekStart(anchor) === weekStart(todayKey) : anchor.slice(0, 7) === todayKey.slice(0, 7);
+  const label = mode === "week" ? weekLabel(anchor) : monthLabel(anchor);
+
+  host.innerHTML =
+    '<div class="ov-head">' +
+      '<div class="ov-seg" role="tablist">' +
+        '<button id="ovMonth" role="tab" aria-selected="' + (mode === "month") + '">월간</button>' +
+        '<button id="ovWeek" role="tab" aria-selected="' + (mode === "week") + '">주간</button>' +
+      "</div>" +
+      '<div class="ov-range">' + label + (isNow ? ' <span class="pc">지금</span>' : "") + "</div>" +
+      '<div class="ov-nav">' +
+        (isNow ? "" : '<button class="chip-btn" id="ovNow">' + (mode === "week" ? "이번 주" : "이번 달") + "</button>") +
+        '<button class="nav" id="ovPrev" title="이전">‹</button>' +
+        '<button class="nav" id="ovNext" title="다음">›</button>' +
+      "</div>" +
+    "</div>" +
+    (mode === "month" ? monthBody() : weekBody());
+
+  $("#ovMonth").onclick = () => { S.ov.mode = "month"; drawOver(); loadWeekSummary(); };
+  $("#ovWeek").onclick = () => { S.ov.mode = "week"; drawOver(); };
+  $("#ovPrev").onclick = () => { S.ov.anchor = ovShift(mode, anchor, -1); drawOver(); };
+  $("#ovNext").onclick = () => { S.ov.anchor = ovShift(mode, anchor, 1); drawOver(); };
+  if ($("#ovNow")) $("#ovNow").onclick = () => { S.ov.anchor = todayKey; drawOver(); };
+
+  host.querySelectorAll("[data-go]").forEach((el) => {
+    el.onclick = () => { openDay(el.getAttribute("data-go")); S.view = "today"; render(); };
+  });
+  host.querySelectorAll("[data-week]").forEach((el) => {
+    el.onclick = () => { S.ov.anchor = el.getAttribute("data-week"); S.ov.mode = "week"; drawOver(); };
+  });
+  host.querySelectorAll(".gl").forEach((box) => {
+    const which = box.getAttribute("data-which");
+    box.querySelectorAll(".g-chk").forEach((b) => {
+      b.onclick = () => {
+        const g = goalsOf(which).find((x) => x.id === b.getAttribute("data-id"));
+        if (!g || readOnly) return;
+        g.done = !g.done; g.doneAt = g.done ? keyOf(new Date()) : null;
+        saveGoals(which); drawOver();
+      };
+    });
+    box.querySelectorAll(".g-del").forEach((b) => {
+      b.onclick = () => {
+        if (readOnly) return;
+        const list = goalsOf(which), i = list.findIndex((x) => x.id === b.getAttribute("data-id"));
+        if (i >= 0) { list.splice(i, 1); saveGoals(which); drawOver(); }
+      };
+    });
+    box.querySelectorAll(".g-title").forEach((inp) => {
+      inp.onchange = () => {
+        const g = goalsOf(which).find((x) => x.id === inp.getAttribute("data-id"));
+        if (!g || readOnly) return;
+        const v = inp.value.trim();
+        if (!v) { inp.value = g.title; return; }
+        g.title = v.slice(0, 120); saveGoals(which);
+      };
+    });
+    box.querySelectorAll(".g-adddue").forEach((b) => {
+      b.onclick = () => {
+        if (readOnly) return;
+        const inp = document.createElement("input");
+        inp.type = "date"; inp.className = "g-due"; inp.min = b.getAttribute("data-min"); inp.max = b.getAttribute("data-max");
+        const id = b.getAttribute("data-id");
+        inp.onchange = () => {
+          const g = goalsOf(which).find((x) => x.id === id);
+          if (!g) return;
+          g.due = inp.value || null; saveGoals(which); drawOver();
+        };
+        inp.onblur = () => { if (!inp.value) drawOver(); };
+        b.replaceWith(inp);
+        inp.focus();
+        try { inp.showPicker(); } catch (e) { }
+      };
+    });
+    box.querySelectorAll(".g-due").forEach((inp) => {
+      inp.onchange = () => {
+        const g = goalsOf(which).find((x) => x.id === inp.getAttribute("data-id"));
+        if (!g || readOnly) return;
+        g.due = inp.value || null; saveGoals(which); drawOver();
+      };
+    });
+    const ti = box.querySelector(".g-new"), di = box.querySelector(".g-newdue"), btn = box.querySelector(".g-add");
+    if (btn) {
+      const go = () => { if (addGoal(which, ti.value, di.value || null)) { ti.value = ""; di.value = ""; drawOver(); ti2(which); } };
+      btn.onclick = go;
+      ti.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } };
+      di.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } };
+    }
+  });
+  if (host.querySelector("#ovToM")) host.querySelector("#ovToM").onclick = () => { S.ov.mode = "month"; drawOver(); loadWeekSummary(); };
+  function ti2(which) { const b = host.querySelector('.gl[data-which="' + which + '"] .g-new'); if (b) b.focus(); }
+
+  /* ---- 목표 목록 한 덩어리 ---- */
+  function goalList(which, title, hint, rangeStart, rangeEnd) {
+    const list = goalsOf(which).slice().sort((a, b) => (a.done - b.done) || ((a.due || "9") < (b.due || "9") ? -1 : 1));
+    const done = list.filter((g) => g.done).length;
+    return '<div class="card gl" data-which="' + which + '">' +
+      '<div class="card-h"><h2>' + title + "</h2>" +
+        '<span class="g-count">' + (list.length ? done + " / " + list.length : "") + "</span></div>" +
+      '<div class="card-b">' +
+        (list.length
+          ? '<div class="bar" style="margin:0 0 11px"><i style="width:' + (list.length ? done / list.length * 100 : 0) + '%;--c:var(--ok)"></i></div>' +
+            '<ul class="goals">' + list.map((g) => {
+              const late = g.due && !g.done && g.due < todayKey;
+              return '<li class="' + (g.done ? "done" : "") + '">' +
+                '<button class="g-chk" data-id="' + esc(g.id) + '" aria-pressed="' + !!g.done + '" title="완료 표시">' + (g.done ? "✓" : "") + "</button>" +
+                '<input class="g-title" data-id="' + esc(g.id) + '" type="text" maxlength="120" value="' + esc(g.title) + '">' +
+                (g.due
+                  ? '<input class="g-due' + (late ? " late" : "") + '" data-id="' + esc(g.id) + '" type="date" value="' + esc(g.due) + '" min="' + esc(rangeStart) + '" max="' + esc(rangeEnd) + '" title="목표 날짜">'
+                  : '<button class="g-adddue" data-id="' + esc(g.id) + '" data-min="' + esc(rangeStart) + '" data-max="' + esc(rangeEnd) + '" title="목표 날짜 넣기">+ 날짜</button>') +
+                '<button class="iconbtn g-del" data-id="' + esc(g.id) + '" title="삭제">✕</button></li>';
+            }).join("") + "</ul>"
+          : '<div class="empty"><b>아직 목표가 없습니다</b>' + hint + "</div>") +
+        '<div class="g-add-row">' +
+          '<input class="g-new" type="text" maxlength="120" placeholder="목표 추가">' +
+          '<input class="g-newdue" type="date" min="' + esc(rangeStart) + '" max="' + esc(rangeEnd) + '" title="날짜(선택)" aria-label="날짜(선택)">' +
+          '<button class="btn g-add">추가</button>' +
+        "</div>" +
+      "</div></div>";
+  }
+
+  function monthBody() {
+    const days = monthDays(anchor), first = days[0], last = days[days.length - 1];
+    const dueM = {}; goalsOf("m").forEach((g) => { if (g.due) (dueM[g.due] = dueM[g.due] || []).push(g); });
+    const lead = (parseKey(first).getDay() + 6) % 7;
+    const cells = [];
+    for (let i = 0; i < lead; i++) cells.push('<div class="cell void"></div>');
+    days.forEach((k) => {
+      const dd = parseKey(k), hit = dueM[k] || [];
+      cells.push('<button class="cell' + (k === todayKey ? " tdy" : "") + '" data-go="' + k + '" title="' + k + (hit.length ? " · " + hit.map((g) => g.title).join(", ") : "") + '">' +
+        '<span class="dn">' + dd.getDate() + "</span>" +
+        (hit.length ? '<span class="dot' + (hit.every((g) => g.done) ? " ok" : "") + '"></span>' : "") + "</button>");
+    });
+    const ws = weeksOfMonth(anchor), sum = S.ov.weekSum || {};
+    return goalList("m", "이번 달 목표", "한 달 동안 끝내고 싶은 걸 크게 적어 두세요. 날짜를 붙이면 아래 달력에 표시됩니다.", first, last) +
+      '<div class="sec-t">주별 목표</div>' +
+      '<div class="card"><div class="card-b"><div class="wk-rows">' +
+        ws.map((w) => {
+          const s = sum[w], e = shiftKey(w, 6), cur = w === weekStart(todayKey);
+          return '<button class="wk-row' + (cur ? " cur" : "") + '" data-week="' + w + '">' +
+            '<span class="wl">' + weekLabel(w) + (cur ? ' <span class="pc">이번 주</span>' : "") + "</span>" +
+            '<span class="wn">' + (s ? (s.n ? s.done + " / " + s.n + "개" : "비어 있음") : "…") + "</span>" +
+            '<span class="wc">›</span></button>';
+        }).join("") +
+      '</div><div class="legend"><span>주를 누르면 그 주의 목표로 갑니다</span></div></div></div>' +
+      '<div class="sec-t">날짜</div>' +
+      '<div class="card"><div class="card-b"><div class="cal">' +
+        ["월", "화", "수", "목", "금", "토", "일"].map((x) => '<div class="dh">' + x + "</div>").join("") +
+        cells.join("") +
+      '</div><div class="legend"><span>날짜를 누르면 그 날의 할일·타임라인으로 갑니다</span><span><b class="dotl"></b>목표 날짜</span></div></div></div>';
+  }
+
+  function weekBody() {
+    const ws = weekStart(anchor), days = []; for (let i = 0; i < 7; i++) days.push(shiftKey(ws, i));
+    const dueW = {}; goalsOf("w").forEach((g) => { if (g.due) (dueW[g.due] = dueW[g.due] || []).push(g); });
+    const mItems = goalsOf("m"), mDone = mItems.filter((g) => g.done).length;
+    return goalList("w", "이번 주 목표", "이번 주에 끝낼 것만 몇 개 적어 두세요. 예: SPSS 강의 듣기.", ws, days[6]) +
+      '<div class="sec-t">날짜</div>' +
+      '<div class="card"><div class="card-b"><div class="wdays">' +
+        days.map((k) => {
+          const dd = parseKey(k), hit = dueW[k] || [];
+          return '<button class="wday' + (k === todayKey ? " tdy" : "") + '" data-go="' + k + '">' +
+            '<span class="wd">' + DOW[dd.getDay()] + "</span><span class=\"dn\">" + dd.getDate() + "</span>" +
+            '<span class="gl-mini">' + (hit.length ? hit.map((g) => '<i class="' + (g.done ? "ok" : "") + '" title="' + esc(g.title) + '"></i>').join("") : "") + "</span></button>";
+        }).join("") +
+      '</div><div class="legend"><span>날짜를 누르면 그 날의 할일·타임라인으로 갑니다</span></div></div></div>' +
+      '<div class="sec-t">' + monthLabel(anchor) + " 목표</div>" +
+      '<div class="card"><div class="card-b">' +
+        (mItems.length
+          ? '<ul class="goals ro">' + mItems.slice().sort((a, b) => a.done - b.done).map((g) =>
+              '<li class="' + (g.done ? "done" : "") + '"><span class="g-mk">' + (g.done ? "✓" : "·") + "</span>" +
+              '<span class="g-ro">' + esc(g.title) + "</span>" +
+              '<span class="n">' + (g.due ? g.due.slice(5).replace("-", "/") : "") + "</span></li>").join("") + "</ul>" +
+            '<div class="legend"><span>' + mDone + " / " + mItems.length + ' 완료 · 고치려면 <button class="lnk" id="ovToM">월간</button>으로</span></div>'
+          : '<div class="empty">이 달의 목표가 비어 있습니다. <button class="lnk" id="ovToM">월간에서 적기</button></div>') +
+      "</div></div>";
+  }
+}
+
 /* ============================== settings ============================== */
 function drawSettings() {
   const host = $("#viewSet");
@@ -1259,13 +1596,14 @@ function saveSet() { save("settings/app", { tags: S.set.tags, dayStart: S.set.da
 /* ============================== nav ============================== */
 $("#tabToday").onclick = () => { S.view = "today"; render(); };
 $("#tabStats").onclick = () => { S.view = "stats"; render(); drawStats(); };
+$("#tabOver").onclick = () => { S.view = "over"; S.ov.anchor = keyOf(new Date()); render(); drawOver(); loadWeekSummary(); };
 $("#tabSet").onclick = () => { S.view = "set"; render(); };
 $("#prevDay").onclick = () => openDay(shiftKey(S.dateKey, -1));
 $("#nextDay").onclick = () => openDay(shiftKey(S.dateKey, 1));
 $("#goToday").onclick = () => openDay(keyOf(new Date()));
 try {
   const h = (location.hash || "").replace("#", "");
-  if (h === "stats" || h === "set") { S.view = h; render(); if (h === "stats") drawStats(); }
+  if (h === "stats" || h === "set" || h === "over") { S.view = h; render(); if (h === "stats") drawStats(); if (h === "over") { drawOver(); loadWeekSummary(); } }
 } catch (e) { }
 </script>
 
