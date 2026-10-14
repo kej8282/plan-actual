@@ -1015,6 +1015,7 @@ $("#runPause").onclick = () => pauseRun();
    Empty space: drag to draw a block (touch: press and hold first, so the page can still scroll).
    Existing block: drag to move it. Both land on 30-minute marks; the sheet still edits to the minute. */
 const SNAP = 30;
+const HOLD_MS = 450;        /* 폰에서 드래그가 시작되기까지 누르고 있어야 하는 시간 */
 ["#trackPlan", "#trackAct"].forEach((sel) => {
   const el = $(sel), kind = el.dataset.kind;
   let drag = null, hold = null;
@@ -1069,8 +1070,8 @@ const SNAP = 30;
              y0: e.clientY, x0: e.clientX, m0: minAt(e.clientY), moved: false, active: false, g: null,
              touch: e.pointerType === "touch", fx: false, pe: null };
     if (drag.touch) { drag.pe = b || el; drag.pe.classList.add("pressing"); }
-    if (rec || e.pointerType !== "touch") activate();
-    else hold = setTimeout(activate, 280);
+    if (e.pointerType !== "touch") activate();
+    else hold = setTimeout(activate, HOLD_MS);      /* 터치: 블록이든 빈 칸이든 길게 눌러야 드래그 */
   });
 
   el.addEventListener("pointermove", (e) => {
@@ -1112,7 +1113,8 @@ const SNAP = 30;
         const r = recs().find((x) => x.id === d.id);
         if (r) { r.start = d.ns; r.end = d.ns + d.len; saveDay(); }
         render();
-      } else { render(); blockSheet(kind, d.id); }
+      } else if (d.moved) { render(); }          /* 끌었다 놓은 건 탭이 아니다 — 같은 자리여도 시트를 열지 않는다 */
+      else { render(); blockSheet(kind, d.id); }
       return;
     }
     if (d.moved && d.a != null) { blockSheet(kind, null, { start: d.a, end: d.b }); return; }

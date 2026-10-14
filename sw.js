@@ -2,7 +2,7 @@
    Network first, cache as a fallback: online you always get the newest build,
    offline you get the last one that loaded. Records live in the browser's own
    storage and are never touched by this cache. */
-const CACHE = "plan-actual-v5";
+const CACHE = "plan-actual-v6";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./fb.js", "./icon-192.png", "./icon-512.png", "./icon-512-maskable.png", "./icon-180.png"];
 
 self.addEventListener("install", (e) => {
