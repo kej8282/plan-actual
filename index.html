@@ -149,6 +149,9 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .blk .rtm{font-style:normal;font-size:9px;color:var(--muted);margin-right:3px;vertical-align:1px}
 .blk .nt{display:block;font-size:10px;line-height:1.3;color:var(--muted);white-space:pre-wrap;margin-top:1px}
 .blk.tiny .nt{display:none}
+/* 기록에 딸려온 금액 — 가계부를 따로 켜지 않게 (로드맵 §3) */
+.blk .kw{font-style:normal;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:9.5px;font-weight:500;color:var(--actual);margin-left:4px;white-space:nowrap}
+.kwsum{font-family:var(--font-num);font-variant-numeric:tabular-nums;color:var(--actual)}
 .tp{display:inline-flex;align-items:center;gap:3px}
 .tp select{flex:0 0 auto;width:auto;min-width:62px;font-family:var(--font-num);font-variant-numeric:tabular-nums}
 .tp b{color:var(--muted);font-weight:500}
@@ -201,7 +204,10 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 }
 @media (max-width:899px){
   .tl-head{display:none}
-  .pane-tabs{display:flex;gap:6px;align-items:center;padding:10px 13px 0}
+  /* 폰: 시간표가 따로 스크롤되지 않게 — 화면 전체가 한 번에 스크롤된다 (이중 스크롤 제거) */
+  .tl-wrap{max-height:none;overflow:visible;overscroll-behavior:auto}
+  /* 시간표가 길어졌으니(이중 스크롤 제거) 계획/실제 전환은 머리글 밑에 붙어 따라온다 */
+  .pane-tabs{display:flex;gap:6px;align-items:center;padding:10px 13px;position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--toph,54px));z-index:12;background:var(--surface);border-bottom:1px solid var(--line-soft)}
   .pane-tabs .pt{flex:1;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:6px 0;font-size:12.5px;font-weight:600;color:var(--muted)}
   .pane-tabs .pt[aria-selected="true"]{background:var(--surface)}
   .pane-tabs .pt[data-i="0"][aria-selected="true"]{color:var(--plan);border-color:var(--plan)}
@@ -492,6 +498,11 @@ function dur(m) {
   return h ? (x ? h + "시간 " + x + "분" : h + "시간") : x + "분";
 }
 function roundTo(m, step) { return Math.round(m / step) * step; }
+/* 기록에 딸려오는 숫자 — 로드맵 §1의 선택적 `m` 필드. m이 없으면 예전과 완전히 같다(마이그레이션 없음).
+   지금은 m.krw(금액)만 쓴다. 나중에 m.kcal이 붙어도 m 안의 다른 키는 건드리지 않는다. */
+function krwOf(o) { const v = o && o.m ? Math.round(+o.m.krw) : 0; return isFinite(v) && v > 0 ? v : 0; }
+function parseKrw(v) { const n = Math.round(+String(v == null ? "" : v).replace(/[^0-9]/g, "")); return isFinite(n) && n > 0 ? Math.min(n, 1e11) : 0; }
+function fmtKrw(n) { return (Math.round(+n) || 0).toLocaleString("ko-KR"); }
 function nowMin() { const d = new Date(); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function toTimeVal(m) { return hhmm(m); }
@@ -843,8 +854,10 @@ function drawTimeline() {
   }
   $("#trackAct").innerHTML = d.logs.slice().sort((a, b) => a.start - b.start).map((l) => blockHTML(l, "log")).join("") + live;
   document.querySelectorAll(".js-manual").forEach((b) => { b.hidden = readOnly || (b.id === "manualM" && S.pane !== 1); });
-  $("#tlHint").innerHTML = readOnly ? "보기 전용입니다."
-    : "빈 칸을 끌어 만들기 · 블록을 끌어 옮기기 · 30분 단위<br>휴대폰에서는 길게 누른 뒤 끄세요 · 블록을 짧게 누르면 10분 단위로 수정";
+  const kwDay = d.logs.reduce((s, l) => s + krwOf(l), 0);
+  $("#tlHint").innerHTML = (kwDay ? '<span class="kwsum">이 날 기록한 지출 ' + fmtKrw(kwDay) + "원</span><br>" : "") +
+    (readOnly ? "보기 전용입니다."
+    : "빈 칸을 끌어 만들기 · 블록을 끌어 옮기기 · 30분 단위<br>휴대폰에서는 길게 누른 뒤 끄세요 · 블록을 짧게 누르면 10분 단위로 수정");
   if (S.needScroll) requestAnimationFrame(() => { if (scrollToFocus()) S.needScroll = false; });
 }
 function scrollToFocus() {
@@ -854,7 +867,12 @@ function scrollToFocus() {
   if (S.dateKey === keyOf(new Date())) m = nowMin();
   else { const all = d.plans.concat(d.logs); m = all.length ? Math.min.apply(null, all.map((x) => x.start)) : S.set.dayStart + 180; }
   const y = ((clamp(m, S.set.dayStart, S.set.dayEnd) - S.set.dayStart) / 10) * (body.offsetHeight / slots());
-  wrap.scrollTop = Math.max(0, y - wrap.clientHeight * 0.35);
+  /* 폰에서는 시간표가 따로 스크롤되지 않으므로(이중 스크롤 제거) 화면 자체를 그 시각으로 옮긴다 */
+  if (wrap.scrollHeight > wrap.clientHeight + 4) wrap.scrollTop = Math.max(0, y - wrap.clientHeight * 0.35);
+  else {
+    const top = body.getBoundingClientRect().top + window.scrollY + y - window.innerHeight * 0.35;
+    window.scrollTo(0, Math.max(0, top));
+  }
   return true;
 }
 function blockHTML(o, kind, isLive) {
@@ -863,11 +881,12 @@ function blockHTML(o, kind, isLive) {
   if (b <= a) return "";
   const top = ((a - st) / 10) * 100 / span, h = ((b - a) / 10) * 100 / span;
   const mins = b - a, tiny = mins < 25;
-  const memo = (o.note || "").trim();
+  const memo = (o.note || "").trim(), kw = krwOf(o);
   return '<button class="blk' + (tiny ? " tiny" : "") + (isLive ? " live" : "") + (o.rid ? " rt" : "") + '" data-kind="' + kind + '" data-id="' + esc(o.id) +
-    '" title="' + esc(hhmm(a) + "–" + hhmm(b) + " " + labelOf(o) + (memo ? " · " + memo : "")) +
+    '" title="' + esc(hhmm(a) + "–" + hhmm(b) + " " + labelOf(o) + (kw ? " · " + fmtKrw(kw) + "원" : "") + (memo ? " · " + memo : "")) +
     '" style="top:' + top + "%;height:calc(" + h + '% - 2px);--c:' + esc(colorOf(o)) + '">' +
-    "<b>" + hhmm(a) + "–" + hhmm(b) + "</b><span>" + (o.rid ? '<i class="rtm">↻</i>' : "") + (memo ? '<i class="rtm">✎</i>' : "") + esc(labelOf(o)) + "</span>" +
+    "<b>" + hhmm(a) + "–" + hhmm(b) + "</b><span>" + (o.rid ? '<i class="rtm">↻</i>' : "") + (memo ? '<i class="rtm">✎</i>' : "") + esc(labelOf(o)) +
+    (kw ? '<i class="kw">' + fmtKrw(kw) + "원</i>" : "") + "</span>" +
     (memo ? '<span class="nt">' + esc(memo) + "</span>" : "") + "</button>";
 }
 function drawNow() {
@@ -1156,6 +1175,65 @@ function setPane(i) {
 document.querySelectorAll(".pane-tabs .pt").forEach((b) => b.onclick = () => setPane(+b.dataset.i));
 setPane(0);
 
+/* 머리글이 sticky라 계획/실제 띠가 붙을 높이를 실제로 재서 넘긴다 */
+function syncTopH() {
+  const t = document.querySelector(".top");
+  if (t) document.documentElement.style.setProperty("--toph", Math.round(t.getBoundingClientRect().height) + "px");
+}
+syncTopH();
+addEventListener("resize", syncTopH);
+addEventListener("orientationchange", () => setTimeout(syncTopH, 200));
+
+/* ---- 탭 좌우 스와이프: 오늘 ↔ 통계 ↔ 목표 ↔ 설정 (로드맵 §7-2) ----
+   충돌 규칙
+   ① 타임라인 안에서는 계획↔실제가 먼저다. 끝 칸(계획에서 오른쪽→, 실제에서 ←)에서 한 번 더 쓸 때만 탭이 바뀐다.
+   ② 안드로이드 뒤로가기 제스처를 피해 화면 가장자리에서 시작한 스와이프는 무시한다.
+   ③ 세로 스크롤과 구분: 가로 이동이 세로의 1.6배 이상일 때만.
+   ④ 입력칸·시트·드래그 핸들 위에서는 끈다. 넘긴 직후의 클릭은 삼킨다(버튼 위를 쓸었을 때). */
+const TAB_ORDER = ["today", "stats", "over", "set"];
+const TAB_BTN = { today: "#tabToday", stats: "#tabStats", over: "#tabOver", set: "#tabSet" };
+const SW_EDGE = 26, SW_MIN = 60;
+let sw = null, swAt = 0;
+function swDead(t) {
+  /* 글자를 넣는 칸 위에서는 끈다(가로로 쓸면 커서가 움직인다). select는 눌러야 열리므로 괜찮다. */
+  return !(t instanceof Element) || !!t.closest("textarea,input:not([type=checkbox]):not([type=radio]),#overlay,.runbar,.draghandle,[data-noswipe]");
+}
+function goTabBy(dir) {
+  const i = TAB_ORDER.indexOf(S.view), n = i + dir;
+  if (i < 0 || n < 0 || n >= TAB_ORDER.length) return;
+  const b = $(TAB_BTN[TAB_ORDER[n]]); if (!b) return;
+  b.click();                /* 탭 전환이 먼저 — swAt을 먼저 세우면 이 클릭까지 삼킨다 */
+  swAt = Date.now();
+  window.scrollTo(0, 0);
+  try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) { }
+}
+/* 포인터가 아니라 터치 이벤트로 본다 — 화면이 스크롤되기 시작하면 브라우저가 포인터를 취소해 버려서
+   가로 스와이프를 놓친다. 터치 이벤트는 스크롤 중에도 계속 온다. */
+addEventListener("touchstart", (e) => {
+  sw = null;
+  if (e.touches.length !== 1 || !$("#overlay").hidden) return;
+  const t = e.touches[0];
+  if (t.clientX < SW_EDGE || t.clientX > window.innerWidth - SW_EDGE) return;
+  if (swDead(e.target)) return;
+  sw = { x0: t.clientX, y0: t.clientY, pane: e.target.closest(".track") ? S.pane : null, done: false };
+}, { passive: true, capture: true });
+addEventListener("touchmove", (e) => {
+  if (!sw || sw.done) return;
+  if (e.touches.length !== 1) { sw = null; return; }
+  const t = e.touches[0], dx = t.clientX - sw.x0, dy = t.clientY - sw.y0;
+  if (Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)) { sw = null; return; }   /* 세로로 가면 스크롤이다 */
+  if (Math.abs(dx) < SW_MIN || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+  const dir = dx < 0 ? 1 : -1;
+  if (sw.pane !== null && sw.pane !== (dir > 0 ? 1 : 0)) { sw = null; return; }  /* 계획↔실제가 먼저 */
+  sw.done = true;
+  goTabBy(dir);
+}, { passive: true, capture: true });
+addEventListener("touchend", () => { sw = null; }, { passive: true, capture: true });
+addEventListener("touchcancel", () => { sw = null; }, { passive: true, capture: true });
+addEventListener("click", (e) => {
+  if (Date.now() - swAt < 350) { e.preventDefault(); e.stopPropagation(); }
+}, true);
+
 /* ============================== sheets ============================== */
 function closeSheet() { $("#overlay").hidden = true; $("#sheet").innerHTML = ""; }
 $("#overlay").addEventListener("pointerdown", (e) => { if (e.target.id === "overlay") closeSheet(); });
@@ -1218,6 +1296,10 @@ function blockSheet(kind, id, preset) {
     (isPlan && o ? '<div class="fld"><label>실제 기록으로 보내기</label><div class="times">' +
       '<button class="btn ghost" id="pNow" style="flex:1">지금 시작</button>' +
       '<button class="btn ghost" id="pAs" style="flex:1">계획대로 기록</button></div></div>' : "") +
+    (isPlan ? "" : '<div class="fld"><label for="bKrw">금액 (원) · 비워 두면 안 셉니다</label><div class="times">' +
+      '<input type="text" inputmode="numeric" id="bKrw" maxlength="13" placeholder="예: 9000" value="' + (krwOf(cur) ? fmtKrw(krwOf(cur)) : "") + '">' +
+      '<button class="btn ghost" id="bKrwX" type="button" style="flex:0 0 auto">지우기</button></div>' +
+      '<div class="mini" style="color:var(--muted);margin-top:5px">이 일과에서 쓴 돈. 통계 탭에 합계가 모입니다.</div></div>') +
     '<div class="fld"><label for="bNote">메모</label>' +
     '<textarea id="bNote" rows="2" maxlength="300" placeholder="' + (isPlan ? "예: 14쪽까지 · 17시부터 15~22쪽" : "무엇을 했는지 남기고 싶은 말") + '">' + esc(cur.note || "") + "</textarea></div>" +
     '<div class="sheet-foot">' + (o ? '<button class="btn danger del" id="bDel">삭제</button>' : "") +
@@ -1231,6 +1313,11 @@ function blockSheet(kind, id, preset) {
   };
   timeSelOn("bStart", null, false, sync); timeSelOn("bEnd", null, false, sync); sync();
   $("#bTask").onchange = () => { $("#freeWrap").hidden = !!$("#bTask").value; };
+  if (!isPlan) {
+    const kb = $("#bKrw");
+    kb.oninput = () => { const n = parseKrw(kb.value); kb.value = n ? fmtKrw(n) : ""; try { kb.setSelectionRange(kb.value.length, kb.value.length); } catch (e) { } };
+    $("#bKrwX").onclick = () => { kb.value = ""; kb.focus(); };
+  }
   if (isPlan && o) {
     $("#pNow").onclick = () => {
       beginRun(o.taskId, o.taskId ? labelOf(o) : (o.label || "기록 중"), o.taskId ? (task(o.taskId) || {}).tagId : o.tagId);
@@ -1254,6 +1341,12 @@ function blockSheet(kind, id, preset) {
       start: roundTo(a, 10), end: roundTo(b, 10)
     };
     rec.note = ($("#bNote") ? $("#bNote").value.trim().slice(0, 300) : "");
+    /* 금액 — 있으면 m.krw에만 담고, m 안의 다른 키(나중의 kcal 등)는 그대로 남긴다. 0이면 필드를 아예 안 만든다. */
+    if (!isPlan) {
+      const kw = parseKrw($("#bKrw") ? $("#bKrw").value : ""), mm = Object.assign({}, (o && o.m) || null);
+      if (kw) mm.krw = kw; else delete mm.krw;
+      if (Object.keys(mm).length) rec.m = mm;
+    } else if (o && o.m) rec.m = o.m;
     if (rec.end <= rec.start) rec.end = rec.start + 10;
     if (o) { const i = arr.findIndex((x) => x.id === o.id); arr[i] = rec; } else arr.push(rec);
     saveDay(); closeSheet(); render();
@@ -1437,6 +1530,15 @@ function dayStats(d) {
     const a = logs.filter((x) => x.taskId === t.id).reduce((s, x) => s + Math.max(0, x.end - x.start), 0);
     if (p > 0 && a > 0) { accPlan += p; accAct += a; accN++; }
   });
+  /* 기록에 딸려온 금액 (로드맵 §3) — 지출은 별도 종류가 아니라 일과에 붙은 숫자다 */
+  let krw = 0; const krwTag = {};
+  logs.forEach((l) => {
+    const v = krwOf(l); if (!v) return;
+    krw += v;
+    const t = l.taskId ? (tasks.find((x) => x.id === l.taskId) || {}) : l;
+    const k = t.tagId || l.tagId || "etc";
+    krwTag[k] = (krwTag[k] || 0) + v;
+  });
   /* 태그별 할일 달성 */
   const tagTasks = {};
   tasks.forEach((t) => { const k = t.tagId || "etc"; const o = tagTasks[k] = tagTasks[k] || { total: 0, done: 0 }; o.total++; if (t.done) o.done++; });
@@ -1444,7 +1546,7 @@ function dayStats(d) {
     date: d.date, total: tasks.length, done: tasks.filter((t) => t.done).length,
     rate: tasks.length ? tasks.filter((t) => t.done).length / tasks.length : null,
     planMin, actMin, kept, keepRate: planMin ? kept / planMin : null, byTag,
-    extra: Object.keys(extraKeys).length, accPlan, accAct, accN, tagTasks
+    extra: Object.keys(extraKeys).length, accPlan, accAct, accN, tagTasks, krw, krwTag
   };
 }
 async function drawStats() {
@@ -1456,7 +1558,7 @@ async function drawStats() {
   const todayKey = keyOf(new Date());
   const t = map[todayKey] || dayStats(emptyDay(todayKey));
 
-  const last = (n) => { const o = []; for (let i = n - 1; i >= 0; i--) { const k = shiftKey(todayKey, -i); o.push(map[k] || { date: k, total: 0, done: 0, rate: null, planMin: 0, actMin: 0, kept: 0, keepRate: null, byTag: {}, extra: 0, accPlan: 0, accAct: 0, accN: 0, tagTasks: {} }); } return o; };
+  const last = (n) => { const o = []; for (let i = n - 1; i >= 0; i--) { const k = shiftKey(todayKey, -i); o.push(map[k] || { date: k, total: 0, done: 0, rate: null, planMin: 0, actMin: 0, kept: 0, keepRate: null, byTag: {}, extra: 0, accPlan: 0, accAct: 0, accN: 0, tagTasks: {}, krw: 0, krwTag: {} }); } return o; };
   const w = last(7), m30 = last(30), d14 = last(14);
   const sum = (a, f) => a.reduce((s, x) => s + (f(x) || 0), 0);
   /* 주간 달성은 건수 합계 기준 — 할일이 한두 개뿐인 날이 평균을 흔들지 않게 */
@@ -1516,7 +1618,29 @@ async function drawStats() {
         return '<i style="background:' + c + '" title="' + d.date + " · " + (r == null ? "기록 없음" : Math.round(r * 100) + "%") + '"></i>';
       }).join("") +
     '</div><div class="legend"><span>왼쪽이 30일 전, 오른쪽이 오늘 · 진할수록 달성률이 높습니다</span></div></div></div>' +
-    habitSection() + timeSection();
+    moneySection() + habitSection() + timeSection();
+
+  /* 지출 — 기록 블록에 적은 금액의 합계. 적은 게 하나도 없으면 아무것도 보여주지 않는다(로드맵 §3). */
+  function moneySection() {
+    const tot30 = sum(m30, (x) => x.krw);
+    if (!tot30) return "";
+    const mk = todayKey.slice(0, 7);
+    const mTot = Object.keys(map).filter((k) => k.slice(0, 7) === mk).reduce((s, k) => s + (map[k].krw || 0), 0);
+    const kt = {}; m30.forEach((d) => Object.keys(d.krwTag || {}).forEach((k) => kt[k] = (kt[k] || 0) + d.krwTag[k]));
+    const kMax = Math.max(1, ...Object.values(kt));
+    return '<div class="sec-t">지출 · 기록에 적은 금액</div>' +
+      '<div class="stat-grid">' +
+        card("오늘", fmtKrw(t.krw) + "원", t.krw ? "기록에 적은 금액" : "아직 없습니다", null, "var(--actual)") +
+        card("최근 7일", fmtKrw(sum(w, (x) => x.krw)) + "원", "하루 평균 " + fmtKrw(Math.round(sum(w, (x) => x.krw) / 7)) + "원", null, "var(--actual)") +
+        card("이번 달", fmtKrw(mTot) + "원", mk.replace("-", "년 ") + "월", null, "var(--actual)") +
+      "</div>" +
+      '<div class="card"><div class="card-b"><div class="rows">' +
+        S.set.tags.filter((g) => kt[g.id]).sort((a, b) => kt[b.id] - kt[a.id]).map((g) =>
+          '<div class="row2"><span class="tag" style="--c:' + esc(g.color) + '">' + esc(g.name) + "</span>" +
+          '<span class="bar"><i style="width:' + (kt[g.id] / kMax * 100) + "%;--c:" + esc(g.color) + '"></i></span>' +
+          '<span class="n">' + fmtKrw(kt[g.id]) + "원</span></div>").join("") +
+      '</div><div class="legend"><span>최근 30일 · 태그별 · 실제 기록 블록에 적은 금액만 셉니다(가계부 전체가 아닙니다)</span></div></div></div>';
+  }
 
   /* 시간은 평가 기준이 아니라 다음 계획을 세우기 위한 참고. 일부러 작고 조용하게. */
   function timeSection() {
