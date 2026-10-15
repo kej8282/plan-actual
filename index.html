@@ -168,6 +168,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .rt-days button[aria-pressed="true"]{background:var(--plan);border-color:var(--plan);color:#fff;font-weight:600}
 .rt-time{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--muted)}
 .rt-time input{flex:1;min-width:0;background:var(--surface)}
+.hb-autolab input{flex:0 0 auto;width:auto;margin:0}.hb-autolab{cursor:pointer}
 .rt-note{font-size:11.5px;color:var(--muted);line-height:1.6;margin:10px 0 0}
 /* ---- 매일 반복 ---- */
 .hbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
@@ -1272,11 +1273,29 @@ function hbOn(k) {                       /* 그 날 해당되는 항목만 */
   const dow = parseKey(k).getDay();
   return (S.hb.items || []).filter((h) => h && !h.off && (!Array.isArray(h.days) || !h.days.length || h.days.indexOf(dow) >= 0));
 }
-function hbCount(rec, id) { return Math.max(0, Math.round((rec && rec.habits && rec.habits[id]) || 0)); }
+/* 같은 입력을 두 번 하지 않기 — "운동" 같은 항목은 같은 분류의 완료한 할일이나 실제 기록이
+   그날 있으면 저장 없이 읽을 때 달성으로 계산한다(원본이 바뀌면 따라온다).
+   손으로 해제하면 habits[id] = -1 로 "그날은 자동 끔"만 남긴다. */
+function hbAuto(h) { return h.auto === undefined ? h.title === "운동" : !!h.auto; }
+function hbHit(rec, h) {
+  if (!rec || !h || !h.tagId) return false;
+  return (rec.tasks || []).some((t) => t && t.done && t.tagId === h.tagId) || (rec.logs || []).some((l) => l && l.tagId === h.tagId);
+}
+function hbRaw(rec, id) { const v = rec && rec.habits && rec.habits[id]; return typeof v === "number" ? Math.round(v) : 0; }
+function hbFind(id) { return (S.hb.items || []).find((x) => x && x.id === id); }
+function hbAutoOn(rec, id) { const h = hbFind(id); return !!(h && hbAuto(h) && hbRaw(rec, id) >= 0 && hbHit(rec, h)); }
+function hbCount(rec, id) {
+  const raw = hbRaw(rec, id);
+  if (raw < 0) return 0;
+  if (hbAutoOn(rec, id)) return Math.max(raw, hbTarget(hbFind(id)));
+  return raw;
+}
 function hbSet(id, n) {
   const d = day();
   if (!d.habits || typeof d.habits !== "object") d.habits = {};
-  if (n > 0) d.habits[id] = n; else delete d.habits[id];
+  if (n > 0) d.habits[id] = n;
+  else if (hbAutoOn(d, id)) d.habits[id] = -1;     /* 자동으로 채워진 걸 해제 */
+  else delete d.habits[id];
   saveDay();
 }
 /* 그 날 몇 개를 끝냈는지 — 달력 점과 통계가 같은 셈을 쓴다. */
@@ -1297,11 +1316,13 @@ function drawHabits() {
   bar.hidden = false;
   bar.innerHTML = list.map((h) => {
     const t = hbTarget(h), n = hbCount(d, h.id), full = n >= t, c = tag(h.tagId).color;
+    const auto = n > 0 && hbRaw(d, h.id) < n && hbAutoOn(d, h.id);      /* 기록에서 저절로 채워진 것 */
     return '<button class="hchip' + (full ? " full" : n ? " part" : "") + '" data-id="' + esc(h.id) + '" style="--c:' + esc(c) + '"' +
-      ' title="' + esc(h.title + " · 눌러서 +1" + (t > 1 ? " (목표 " + t + ")" : "") + " · 길게 누르면 지움") + '">' +
+      ' title="' + esc(h.title + (auto ? " · 오늘 기록에서 자동으로 채워짐(↺) — 길게 누르면 해제" : " · 눌러서 +1" + (t > 1 ? " (목표 " + t + ")" : "") + " · 길게 누르면 지움")) + '">' +
       '<span class="hk">' + (full ? "✓" : "") + "</span>" +
       '<span class="ht">' + esc(h.title) + "</span>" +
-      (t > 1 ? '<span class="hn">' + n + "/" + t + "</span>" : "") + "</button>";
+      (t > 1 ? '<span class="hn">' + n + "/" + t + "</span>" : "") +
+      (auto ? '<span class="hn" aria-label="자동">↺</span>' : "") + "</button>";
   }).join("");
   bar.querySelectorAll(".hchip").forEach((b) => {
     const id = b.getAttribute("data-id"), h = (S.hb.items || []).find((x) => x.id === id);
@@ -1334,6 +1355,8 @@ function drawHabitSettings() {
       '<div class="rt-time"><span>하루 목표</span>' +
       '<input type="number" class="hb-target" min="1" max="99" step="1" value="' + hbTarget(h) + '" aria-label="하루 목표 횟수">' +
       "<span>" + (hbTarget(h) > 1 ? "번" : "번 (1이면 체크만)") + "</span></div>" +
+      '<label class="rt-time hb-autolab"><input type="checkbox" class="hb-auto"' + (hbAuto(h) ? " checked" : "") + '>' +
+      "<span>같은 분류의 완료한 할일·기록이 있으면 자동 완료</span></label>" +
     "</div>").join("")
     : '<div class="empty">아직 없습니다. 신문기사 읽기, 듀오링고처럼 <b style="display:inline">매일 몇 번</b> 하는 일을 넣어 보세요.</div>';
 
@@ -1346,6 +1369,7 @@ function drawHabitSettings() {
       h.target = clamp(Math.round(+e.target.value || 1), 1, 99);
       commit(); drawSettings();
     };
+    row.querySelector(".hb-auto").onchange = (e) => { h.auto = e.target.checked; commit(); };
     row.querySelector(".hb-del").onclick = () => { S.hb.items.splice(i, 1); commit(); drawSettings(); };
     row.querySelectorAll(".hb-day").forEach((db) => db.onclick = () => {
       const k = +db.dataset.d;
@@ -1529,7 +1553,7 @@ async function loadHabitDays(force) {
   if (!(S.hb.items || []).length) return;
   if (!force && hbDayCache && Date.now() - hbDayCache.at < 90000) return;
   const rows = await readColl("days", "date", 400), map = {};
-  rows.forEach((r) => { if (r && r.date && r.habits) map[r.date] = r; });
+  rows.forEach((r) => { if (r && r.date && (r.habits || (r.tasks && r.tasks.length) || (r.logs && r.logs.length))) map[r.date] = r; });
   hbDayCache = { at: Date.now(), map: map };
   if (S.view === "over" && S.ov.mode === "month") drawOver();
 }
@@ -1900,7 +1924,12 @@ addEventListener("click", (e) => {
 }, true);
 
 /* ============================== nav ============================== */
-$("#tabToday").onclick = () => { S.view = "today"; render(); };
+/* 다른 탭에서 탭 버튼으로 돌아오면 오늘 날짜로. 목표 탭의 날짜 클릭(data-go)은 view를 직접 바꾸므로 영향 없음. */
+$("#tabToday").onclick = () => {
+  const back = S.view !== "today", t = keyOf(new Date());
+  S.view = "today";
+  if (back && S.dateKey !== t) openDay(t); else render();
+};
 $("#tabStats").onclick = () => { S.view = "stats"; render(); drawStats(); };
 $("#tabOver").onclick = () => { S.view = "over"; S.ov.anchor = keyOf(new Date()); render(); drawOver(); loadWeekSummary(); loadHabitDays(true); };
 $("#tabSet").onclick = () => { S.view = "set"; render(); };
