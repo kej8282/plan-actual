@@ -850,7 +850,7 @@ function drawTimeline() {
   let live = "";
   if (S.running && !S.running.paused && S.running.dateKey === d.date) {
     const s = S.running.startMin, e = Math.max(s + 5, nowMin());
-    live = blockHTML({ id: "__live", taskId: S.running.taskId, label: S.running.label, tagId: S.running.tagId, start: s, end: e }, "log", true);
+    live = blockHTML({ id: "__live", taskId: S.running.taskId, label: S.running.label, tagId: S.running.tagId, start: s, end: e, note: S.running.note || "", m: S.running.m || null }, "log", true);
   }
   $("#trackAct").innerHTML = d.logs.slice().sort((a, b) => a.start - b.start).map((l) => blockHTML(l, "log")).join("") + live;
   document.querySelectorAll(".js-manual").forEach((b) => { b.hidden = readOnly || (b.id === "manualM" && S.pane !== 1); });
@@ -1006,7 +1006,9 @@ $("#fillBtn").onclick = fillFromPlan;
 async function commitSegment(r) {
   if (!r || r.paused || !r.startMs) return null;
   const end = r.dateKey === keyOf(new Date()) ? Math.round(nowMin()) : S.set.dayEnd;
-  const log = { id: uid(), taskId: r.taskId, label: r.label, tagId: r.tagId, start: r.startMin, end: Math.max(r.startMin + 1, end > r.startMin ? end : r.startMin + 1), note: "" };
+  const log = { id: uid(), taskId: r.taskId, label: r.label, tagId: r.tagId, start: r.startMin, end: Math.max(r.startMin + 1, end > r.startMin ? end : r.startMin + 1), note: r.note || "" };
+  /* 기록하는 동안 미리 적어 둔 금액·메모를 그대로 물려준다(§3) */
+  if (r.m && typeof r.m === "object" && Object.keys(r.m).length) log.m = r.m;
   if (r.dateKey === S.dateKey) { day().logs.push(log); saveDay(); }
   else {
     const d = Object.assign(emptyDay(r.dateKey), (await readOnce("days/" + r.dateKey)) || {});
@@ -1031,7 +1033,8 @@ async function pauseRun() {
   }
   const banked = (r.accMs || 0) + (r.startMs ? Date.now() - r.startMs : 0);
   const log = await commitSegment(r);
-  const nr = Object.assign({}, r, { paused: true, startMs: 0, accMs: banked });
+  /* 금액·메모는 방금 기록된 토막이 가져갔다 — 이어서 할 때 또 붙으면 두 번 세어진다 */
+  const nr = Object.assign({}, r, { paused: true, startMs: 0, accMs: banked, m: null, note: "" });
   S.running = nr; save("state/running", nr); render();
   if (log) note(dur(log.end - log.start) + " 기록하고 중지했습니다 · " + hhmm(log.start) + "–" + hhmm(log.end));
 }
@@ -1134,7 +1137,7 @@ const HOLD_MS = 450;        /* 폰에서 드래그가 시작되기까지 누르�
   el.addEventListener("pointerup", () => {
     if (!drag) return;
     const d = drag; clear();
-    if (d.mode === "live") { stopRun(); return; }
+    if (d.mode === "live") { runSheet(); return; }   /* 실행 중 블록을 눌러도 멈추지 않는다 — 시트를 연다 */
     if (d.mode === "move") {
       if (d.moved && d.ns != null && d.ns !== d.s0) {
         const r = recs().find((x) => x.id === d.id);
@@ -1154,7 +1157,7 @@ const HOLD_MS = 450;        /* 폰에서 드래그가 시작되기까지 누르�
   el.addEventListener("click", (e) => {
     if (e.detail !== 0) return;
     const b = e.target.closest(".blk"); if (!b) return;
-    if (b.dataset.id === "__live") stopRun(); else blockSheet(kind, b.dataset.id);
+    if (b.dataset.id === "__live") runSheet(); else blockSheet(kind, b.dataset.id);
   });
 });
 document.querySelectorAll(".js-manual").forEach((b) => b.onclick = () => {
@@ -1274,6 +1277,41 @@ function taskSheet(t) {
     d.logs.forEach((l) => { if (l.taskId === t.id) { l.taskId = null; l.label = t.title; l.tagId = t.tagId; } });
     saveDay(); closeSheet(); render();
   };
+}
+
+/* 실행 중인 일을 눌렀을 때 — 예전엔 바로 종료됐다(사용자 버그 신고 2026-10-15).
+   지금은 시트를 열어 끝내기 전에 금액·메모를 미리 적어 둘 수 있다. 적어 둔 값은
+   `state/running`에 같이 저장돼 종료(또는 중지)할 때 그 기록으로 넘어간다. */
+function runSheet() {
+  const r = S.running; if (!r) { render(); return; }
+  const kw = krwOf(r);
+  openSheet('<h3>기록 중</h3>' +
+    '<div class="fld"><label>지금 하는 일</label>' +
+    '<div class="note-quiet">' + esc(r.label || "기록 중") + " · " + hhmm(r.startMin) + "부터" + (r.paused ? " (중지됨)" : "") + "</div></div>" +
+    '<div class="fld"><label for="rKrw">금액 (원) · 비워 두면 안 셉니다</label><div class="times">' +
+    '<input type="text" inputmode="numeric" id="rKrw" maxlength="13" placeholder="예: 9000" value="' + (kw ? fmtKrw(kw) : "") + '">' +
+    '<button class="btn ghost" id="rKrwX" type="button" style="flex:0 0 auto">지우기</button></div>' +
+    '<div class="mini" style="color:var(--muted);margin-top:5px">끝낼 때 이 기록에 같이 들어갑니다.</div></div>' +
+    '<div class="fld"><label for="rNote">메모</label>' +
+    '<textarea id="rNote" rows="2" maxlength="300" placeholder="무엇을 했는지 남기고 싶은 말">' + esc(r.note || "") + "</textarea></div>" +
+    '<div class="sheet-foot">' +
+    '<button class="btn ghost" id="rPause">' + (r.paused ? "이어서" : "중지") + "</button>" +
+    '<button class="btn go-save" id="rKeep">저장</button>' +
+    '<button class="btn" id="rStop" style="background:var(--actual)">종료</button></div>');
+  const kb = $("#rKrw");
+  kb.oninput = () => { const n = parseKrw(kb.value); kb.value = n ? fmtKrw(n) : ""; try { kb.setSelectionRange(kb.value.length, kb.value.length); } catch (e) { } };
+  $("#rKrwX").onclick = () => { kb.value = ""; kb.focus(); };
+  const take = () => {
+    const cur = S.running; if (!cur) return null;
+    const n = parseKrw(kb.value), mm = Object.assign({}, cur.m || null);
+    if (n) mm.krw = n; else delete mm.krw;
+    const nr = Object.assign({}, cur, { m: Object.keys(mm).length ? mm : null, note: $("#rNote").value.trim().slice(0, 300) });
+    S.running = nr; save("state/running", nr);
+    return nr;
+  };
+  $("#rKeep").onclick = () => { take(); closeSheet(); render(); note("끝낼 때 같이 기록됩니다."); };
+  $("#rPause").onclick = () => { take(); closeSheet(); pauseRun(); };
+  $("#rStop").onclick = () => { take(); closeSheet(); stopRun(); };
 }
 
 function blockSheet(kind, id, preset) {
