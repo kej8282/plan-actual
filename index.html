@@ -525,7 +525,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.9.1";
+const BUILD = "0.9.2";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -602,7 +602,7 @@ const DEFAULT_CATS = [
   { id: "heal", name: "의료·건강", color: "#B4891A" },
   { id: "etcm", name: "기타", color: "#7A7480" }
 ];
-const DEFAULT_SET = { tags: DEFAULT_TAGS, cats: DEFAULT_CATS, places: [], dayStart: 360, dayEnd: 1440 };
+const DEFAULT_SET = { tags: DEFAULT_TAGS, cats: DEFAULT_CATS, dayStart: 360, dayEnd: 1440 };
 
 /* ============================== store ============================== */
 /* One row per day at days/<YYYY-MM-DD>, config at settings/app, live timer at state/running.
@@ -819,7 +819,6 @@ render();
     S.set = Object.assign(JSON.parse(JSON.stringify(DEFAULT_SET)), d || {});
     if (!Array.isArray(S.set.tags) || !S.set.tags.length) S.set.tags = JSON.parse(JSON.stringify(DEFAULT_TAGS));
     if (!Array.isArray(S.set.cats) || !S.set.cats.length) S.set.cats = JSON.parse(JSON.stringify(DEFAULT_CATS));
-    if (!Array.isArray(S.set.places)) S.set.places = [];
     S.set.dayStart = clamp(Math.round(S.set.dayStart / 60) * 60, 0, 780);
     S.set.dayEnd = clamp(Math.round(S.set.dayEnd / 60) * 60, S.set.dayStart + 360, 1680);
     render();
@@ -1329,6 +1328,27 @@ addEventListener("click", (e) => {
 }, true);
 
 /* ============================== sheets ============================== */
+/* 브라우저가 전에 친 값을 드롭다운으로 띄우는 것도 끈다 — 사용자가 싫어함(2026-10-19).
+   시트·목록은 그때그때 새로 만들어지므로 새로 붙는 칸까지 지켜본다. */
+function acOff(el) {
+  if (!el || el.tagName !== "INPUT") return;
+  const t = (el.type || "text").toLowerCase();
+  if (t !== "text" && t !== "search" && t !== "number") return;
+  el.setAttribute("autocomplete", "off");
+  el.setAttribute("autocorrect", "off");
+  el.setAttribute("autocapitalize", "off");
+  el.setAttribute("spellcheck", "false");
+}
+function killAC(root) {
+  if (!root || root.nodeType !== 1) return;
+  acOff(root);
+  if (root.querySelectorAll) root.querySelectorAll("input").forEach(acOff);
+}
+killAC(document.body);
+try {
+  new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(killAC))).observe(document.body, { childList: true, subtree: true });
+} catch (e) { }
+
 function closeSheet() { $("#overlay").hidden = true; $("#sheet").innerHTML = ""; }
 $("#photoOv").onclick = () => { $("#photoOv").hidden = true; $("#photoImg").src = ""; };
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#photoOv").hidden) $("#photoOv").click(); });
@@ -1388,7 +1408,6 @@ function krwInputOn(kb, after) {
 /* 금액·장소는 한 칩 줄에 나란히 둔다. 평소엔 접혀 있고 누르면 그 자리에 열린다. */
 function moneyFieldHTML(o, p) {
   const open = moneyRowsOf(o).length > 0, pl = placeOf(o), pOpen = !!pl;
-  const recent = (S.set.places || []).filter((x) => x && x !== pl).slice(0, 6);
   return '<div class="fld">' +
     '<div class="chiprow">' +
       '<button class="addchip" type="button" id="' + p + 'Chip"' + (open ? " hidden" : "") + '>＋ 금액</button>' +
@@ -1404,8 +1423,6 @@ function moneyFieldHTML(o, p) {
     '<input type="text" id="' + p + 'Plc" maxlength="40" placeholder="예: 학교 도서관" value="' + esc(pl) + '">' +
     '<button class="btn ghost" type="button" id="' + p + 'PMap" style="flex:0 0 auto" title="네이버지도에서 이 장소를 찾습니다">지도</button>' +
     '<button class="btn ghost" type="button" id="' + p + 'PX" style="flex:0 0 auto">지우기</button></div>' +
-    (recent.length ? '<div class="chiprow plcs" id="' + p + 'Recent" style="margin-top:7px">' +
-      recent.map((x) => '<button class="addchip sm" type="button" data-plc="' + esc(x) + '">' + esc(x) + "</button>").join("") + "</div>" : "") +
     "</div>" +
     '<div id="' + p + 'Body"' + (open ? "" : " hidden") + ' style="margin-top:9px"><label>금액 (원) · 지출 분류</label>' +
     '<div class="mrows" id="' + p + 'Rows"></div>' +
@@ -1454,10 +1471,6 @@ function moneyFieldOn(p, o) {
   if (pChip) {
     pChip.onclick = () => { pChip.hidden = true; pBody.hidden = false; pIn.focus(); };
     $("#" + p + "PX").onclick = () => { pIn.value = ""; pBody.hidden = true; pChip.hidden = false; };
-    const rc = $("#" + p + "Recent");
-    if (rc) rc.querySelectorAll("[data-plc]").forEach((b) => {
-      b.onclick = () => { pIn.value = b.getAttribute("data-plc"); pIn.focus(); };
-    });
     /* 지도 — 키도 서버도 없이 되는 건 "이름으로 검색해 열기"까지다.
        링크(naver.me)만 주고 이름·좌표를 알아내려면 서버가 필요하다(브라우저에서 CORS로 막힘). */
     $("#" + p + "PMap").onclick = () => {
@@ -1542,14 +1555,7 @@ async function photoView(id, thumb) {
   const full = await photoRead(id);
   if (full && !ov.hidden) img.src = full;
 }
-/* 최근 쓴 장소를 앞으로 당겨 둔다 — 다음 기록에서 칩 한 번으로 끝나게(§7-1 파생) */
-function rememberPlace(v) {
-  const s = (v || "").trim(); if (!s) return;
-  const cur = (S.set.places || []).filter((x) => x && x !== s);
-  cur.unshift(s);
-  S.set.places = cur.slice(0, 12);
-  saveSet();
-}
+/* 최근 장소 칩은 넣었다가 뺐다 — 사용자가 "지난 기록 띄우지 마"(2026-10-19). 목록을 모으지도 않는다. */
 /* 금액이 하나도 없으면 분류도 같이 버린다. m 안의 다른 키(나중의 kcal 등)는 보존. */
 function moneyFieldRead(get, prev) {
   const mm = Object.assign({}, prev || null);
@@ -1600,7 +1606,7 @@ function runSheet() {
   const exR = moneyFieldOn("r", r);
   const take = () => {
     const cur = S.running; if (!cur) return null;
-    const pl = exR.place(); rememberPlace(pl);
+    const pl = exR.place();
     const pc = {}; photoCommit(pc, exR.photo());
     const nr = Object.assign({}, cur, { m: moneyFieldRead(exR.money, cur.m), place: pl, ph: pc.ph || "", pht: pc.pht || "", note: $("#rNote").value.trim().slice(0, 300) });
     S.running = nr; save("state/running", nr);
@@ -1673,7 +1679,7 @@ function blockSheet(kind, id, preset) {
     rec.note = ($("#bNote") ? $("#bNote").value.trim().slice(0, 300) : "");
     if (!isPlan) {
       const mm = moneyFieldRead(exB.money, o && o.m); if (mm) rec.m = mm;
-      const pl = exB.place(); if (pl) { rec.place = pl; rememberPlace(pl); }
+      const pl = exB.place(); if (pl) rec.place = pl;
       photoCommit(rec, exB.photo());
     }
     else if (o && o.m) rec.m = o.m;
@@ -2564,7 +2570,7 @@ function fixWindow() {
   S.set.dayEnd = clamp(Math.round(S.set.dayEnd / 60) * 60, S.set.dayStart + 360, 1680);
   saveSet(); drawSettings();
 }
-function saveSet() { save("settings/app", { tags: S.set.tags, cats: S.set.cats, places: S.set.places || [], dayStart: S.set.dayStart, dayEnd: S.set.dayEnd }); }
+function saveSet() { save("settings/app", { tags: S.set.tags, cats: S.set.cats, dayStart: S.set.dayStart, dayEnd: S.set.dayEnd }); }
 
 /* 날짜·시간 칸은 작은 아이콘을 정확히 눌러야 열린다. 칸 어디를 눌러도 열리게 한다. */
 addEventListener("click", (e) => {
