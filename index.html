@@ -152,6 +152,10 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 /* 기록에 딸려온 금액 — 가계부를 따로 켜지 않게 (로드맵 §3) */
 .blk .kw{font-style:normal;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:9.5px;font-weight:500;color:var(--actual);margin-left:4px;white-space:nowrap}
 .kwsum{font-family:var(--font-num);font-variant-numeric:tabular-nums;color:var(--actual)}
+.blk .plc{font-style:normal;font-size:9.5px;color:var(--muted);margin-left:4px}
+.chiprow{display:flex;gap:7px;flex-wrap:wrap}
+.addchip.sm{padding:5px 11px;font-size:11.5px;border-style:solid;border-radius:999px}
+.plcs .addchip.sm{color:var(--ink)}
 /* 시트에 칸을 바로 늘리지 않고 칩으로 연다 — 폰에서 시트가 길어지는 걸 막는다 */
 .addchip{border:1px dashed var(--line);background:var(--surface-2);border-radius:999px;padding:8px 15px;font-size:12.5px;color:var(--muted)}
 .addchip:hover{border-color:var(--actual);color:var(--actual)}
@@ -576,7 +580,7 @@ const DEFAULT_CATS = [
   { id: "heal", name: "의료·건강", color: "#B4891A" },
   { id: "etcm", name: "기타", color: "#7A7480" }
 ];
-const DEFAULT_SET = { tags: DEFAULT_TAGS, cats: DEFAULT_CATS, dayStart: 360, dayEnd: 1440 };
+const DEFAULT_SET = { tags: DEFAULT_TAGS, cats: DEFAULT_CATS, places: [], dayStart: 360, dayEnd: 1440 };
 
 /* ============================== store ============================== */
 /* One row per day at days/<YYYY-MM-DD>, config at settings/app, live timer at state/running.
@@ -778,6 +782,7 @@ render();
     S.set = Object.assign(JSON.parse(JSON.stringify(DEFAULT_SET)), d || {});
     if (!Array.isArray(S.set.tags) || !S.set.tags.length) S.set.tags = JSON.parse(JSON.stringify(DEFAULT_TAGS));
     if (!Array.isArray(S.set.cats) || !S.set.cats.length) S.set.cats = JSON.parse(JSON.stringify(DEFAULT_CATS));
+    if (!Array.isArray(S.set.places)) S.set.places = [];
     S.set.dayStart = clamp(Math.round(S.set.dayStart / 60) * 60, 0, 780);
     S.set.dayEnd = clamp(Math.round(S.set.dayEnd / 60) * 60, S.set.dayStart + 360, 1680);
     render();
@@ -899,7 +904,7 @@ function drawTimeline() {
   let live = "";
   if (S.running && !S.running.paused && S.running.dateKey === d.date) {
     const s = S.running.startMin, e = Math.max(s + 5, nowMin());
-    live = blockHTML({ id: "__live", taskId: S.running.taskId, label: S.running.label, tagId: S.running.tagId, start: s, end: e, note: S.running.note || "", m: S.running.m || null }, "log", true);
+    live = blockHTML({ id: "__live", taskId: S.running.taskId, label: S.running.label, tagId: S.running.tagId, start: s, end: e, note: S.running.note || "", m: S.running.m || null, place: S.running.place || "" }, "log", true);
   }
   $("#trackAct").innerHTML = d.logs.slice().sort((a, b) => a.start - b.start).map((l) => blockHTML(l, "log")).join("") + live;
   document.querySelectorAll(".js-manual").forEach((b) => { b.hidden = readOnly || (b.id === "manualM" && S.pane !== 1); });
@@ -928,12 +933,12 @@ function blockHTML(o, kind, isLive) {
   if (b <= a) return "";
   const top = ((a - st) / 10) * 100 / span, h = ((b - a) / 10) * 100 / span;
   const mins = b - a, tiny = mins < 25;
-  const memo = (o.note || "").trim(), kw = krwOf(o);
+  const memo = (o.note || "").trim(), kw = krwOf(o), plc = placeOf(o);
   return '<button class="blk' + (tiny ? " tiny" : "") + (isLive ? " live" : "") + (o.rid ? " rt" : "") + '" data-kind="' + kind + '" data-id="' + esc(o.id) +
-    '" title="' + esc(hhmm(a) + "–" + hhmm(b) + " " + labelOf(o) + (kw ? " · " + fmtKrw(kw) + "원" + kwBreak(o) : "") + (memo ? " · " + memo : "")) +
+    '" title="' + esc(hhmm(a) + "–" + hhmm(b) + " " + labelOf(o) + (plc ? " @" + plc : "") + (kw ? " · " + fmtKrw(kw) + "원" + kwBreak(o) : "") + (memo ? " · " + memo : "")) +
     '" style="top:' + top + "%;height:calc(" + h + '% - 2px);--c:' + esc(colorOf(o)) + '">' +
     "<b>" + hhmm(a) + "–" + hhmm(b) + "</b><span>" + (o.rid ? '<i class="rtm">↻</i>' : "") + (memo ? '<i class="rtm">✎</i>' : "") + esc(labelOf(o)) +
-    (kw ? '<i class="kw">' + fmtKrw(kw) + "원</i>" : "") + "</span>" +
+    (kw ? '<i class="kw">' + fmtKrw(kw) + "원</i>" : "") + (plc ? '<i class="plc">@' + esc(plc) + "</i>" : "") + "</span>" +
     (memo ? '<span class="nt">' + esc(memo) + "</span>" : "") + "</button>";
 }
 function drawNow() {
@@ -1058,6 +1063,7 @@ async function commitSegment(r) {
   const log = { id: uid(), taskId: r.taskId, label: r.label, tagId: r.tagId, start: r.startMin, end: Math.max(r.startMin + 1, end > r.startMin ? end : r.startMin + 1), note: r.note || "" };
   /* 기록하는 동안 미리 적어 둔 금액·메모를 그대로 물려준다(§3) */
   if (r.m && typeof r.m === "object" && Object.keys(r.m).length) log.m = r.m;
+  if (r.place) log.place = r.place;
   if (r.dateKey === S.dateKey) { day().logs.push(log); saveDay(); }
   else {
     const d = Object.assign(emptyDay(r.dateKey), (await readOnce("days/" + r.dateKey)) || {});
@@ -1083,7 +1089,7 @@ async function pauseRun() {
   const banked = (r.accMs || 0) + (r.startMs ? Date.now() - r.startMs : 0);
   const log = await commitSegment(r);
   /* 금액·메모는 방금 기록된 토막이 가져갔다 — 이어서 할 때 또 붙으면 두 번 세어진다 */
-  const nr = Object.assign({}, r, { paused: true, startMs: 0, accMs: banked, m: null, note: "" });
+  const nr = Object.assign({}, r, { paused: true, startMs: 0, accMs: banked, m: null, note: "", place: "" });
   S.running = nr; save("state/running", nr); render();
   if (log) note(dur(log.end - log.start) + " 기록하고 중지했습니다 · " + hhmm(log.start) + "–" + hhmm(log.end));
 }
@@ -1339,11 +1345,22 @@ function krwInputOn(kb, after) {
     if (after) after(n);
   };
 }
+/* 금액·장소는 한 칩 줄에 나란히 둔다. 평소엔 접혀 있고 누르면 그 자리에 열린다. */
 function moneyFieldHTML(o, p) {
-  const open = moneyRowsOf(o).length > 0;
+  const open = moneyRowsOf(o).length > 0, pl = placeOf(o), pOpen = !!pl;
+  const recent = (S.set.places || []).filter((x) => x && x !== pl).slice(0, 6);
   return '<div class="fld">' +
-    '<button class="addchip" type="button" id="' + p + 'Chip"' + (open ? " hidden" : "") + '>＋ 금액</button>' +
-    '<div id="' + p + 'Body"' + (open ? "" : " hidden") + '><label>금액 (원) · 지출 분류</label>' +
+    '<div class="chiprow">' +
+      '<button class="addchip" type="button" id="' + p + 'Chip"' + (open ? " hidden" : "") + '>＋ 금액</button>' +
+      '<button class="addchip" type="button" id="' + p + 'PChip"' + (pOpen ? " hidden" : "") + '>＋ 장소</button>' +
+    "</div>" +
+    '<div id="' + p + 'PBody"' + (pOpen ? "" : " hidden") + ' style="margin-top:9px"><label for="' + p + 'Plc">장소</label><div class="times">' +
+    '<input type="text" id="' + p + 'Plc" maxlength="40" placeholder="예: 학교 도서관" value="' + esc(pl) + '">' +
+    '<button class="btn ghost" type="button" id="' + p + 'PX" style="flex:0 0 auto">지우기</button></div>' +
+    (recent.length ? '<div class="chiprow plcs" id="' + p + 'Recent" style="margin-top:7px">' +
+      recent.map((x) => '<button class="addchip sm" type="button" data-plc="' + esc(x) + '">' + esc(x) + "</button>").join("") + "</div>" : "") +
+    "</div>" +
+    '<div id="' + p + 'Body"' + (open ? "" : " hidden") + ' style="margin-top:9px"><label>금액 (원) · 지출 분류</label>' +
     '<div class="mrows" id="' + p + 'Rows"></div>' +
     '<div class="mfoot"><button class="btn ghost" type="button" id="' + p + 'Add">＋ 분류 더하기</button>' +
     '<span class="mtot" id="' + p + 'Tot"></span></div>' +
@@ -1384,7 +1401,27 @@ function moneyFieldOn(p, o) {
   };
   $("#" + p + "Add").onclick = () => { rows.push({ krw: 0, cat: "" }); draw(rows.length - 1); };
   draw();
-  return () => rows;
+  /* 장소 — 글자라서 m(숫자 전용)이 아니라 기록의 형제 필드로 간다(로드맵 §1·§3-3).
+     최근 쓴 곳은 칩으로 띄워 한 번 탭으로 넣는다(장소는 반복된다). */
+  const pChip = $("#" + p + "PChip"), pBody = $("#" + p + "PBody"), pIn = $("#" + p + "Plc");
+  if (pChip) {
+    pChip.onclick = () => { pChip.hidden = true; pBody.hidden = false; pIn.focus(); };
+    $("#" + p + "PX").onclick = () => { pIn.value = ""; pBody.hidden = true; pChip.hidden = false; };
+    const rc = $("#" + p + "Recent");
+    if (rc) rc.querySelectorAll("[data-plc]").forEach((b) => {
+      b.onclick = () => { pIn.value = b.getAttribute("data-plc"); pIn.focus(); };
+    });
+  }
+  return { money: () => rows, place: () => (pIn ? pIn.value.trim().slice(0, 40) : "") };
+}
+function placeOf(o) { return o && typeof o.place === "string" ? o.place.trim() : ""; }
+/* 최근 쓴 장소를 앞으로 당겨 둔다 — 다음 기록에서 칩 한 번으로 끝나게(§7-1 파생) */
+function rememberPlace(v) {
+  const s = (v || "").trim(); if (!s) return;
+  const cur = (S.set.places || []).filter((x) => x && x !== s);
+  cur.unshift(s);
+  S.set.places = cur.slice(0, 12);
+  saveSet();
 }
 /* 금액이 하나도 없으면 분류도 같이 버린다. m 안의 다른 키(나중의 kcal 등)는 보존. */
 function moneyFieldRead(get, prev) {
@@ -1433,10 +1470,11 @@ function runSheet() {
     '<button class="btn ghost" id="rPause">' + (r.paused ? "이어서" : "중지") + "</button>" +
     '<button class="btn go-save" id="rKeep">저장</button>' +
     '<button class="btn" id="rStop" style="background:var(--actual)">종료</button></div>');
-  const getR = moneyFieldOn("r", r);
+  const exR = moneyFieldOn("r", r);
   const take = () => {
     const cur = S.running; if (!cur) return null;
-    const nr = Object.assign({}, cur, { m: moneyFieldRead(getR, cur.m), note: $("#rNote").value.trim().slice(0, 300) });
+    const pl = exR.place(); rememberPlace(pl);
+    const nr = Object.assign({}, cur, { m: moneyFieldRead(exR.money, cur.m), place: pl, note: $("#rNote").value.trim().slice(0, 300) });
     S.running = nr; save("state/running", nr);
     return nr;
   };
@@ -1477,7 +1515,7 @@ function blockSheet(kind, id, preset) {
   };
   timeSelOn("bStart", null, false, sync); timeSelOn("bEnd", null, false, sync); sync();
   $("#bTask").onchange = () => { $("#freeWrap").hidden = !!$("#bTask").value; };
-  const getB = isPlan ? null : moneyFieldOn("b", cur);
+  const exB = isPlan ? null : moneyFieldOn("b", cur);
   if (isPlan && o) {
     $("#pNow").onclick = () => {
       beginRun(o.taskId, o.taskId ? labelOf(o) : (o.label || "기록 중"), o.taskId ? (task(o.taskId) || {}).tagId : o.tagId);
@@ -1501,7 +1539,10 @@ function blockSheet(kind, id, preset) {
       start: roundTo(a, 10), end: roundTo(b, 10)
     };
     rec.note = ($("#bNote") ? $("#bNote").value.trim().slice(0, 300) : "");
-    if (!isPlan) { const mm = moneyFieldRead(getB, o && o.m); if (mm) rec.m = mm; }
+    if (!isPlan) {
+      const mm = moneyFieldRead(exB.money, o && o.m); if (mm) rec.m = mm;
+      const pl = exB.place(); if (pl) { rec.place = pl; rememberPlace(pl); }
+    }
     else if (o && o.m) rec.m = o.m;
     if (rec.end <= rec.start) rec.end = rec.start + 10;
     if (o) { const i = arr.findIndex((x) => x.id === o.id); arr[i] = rec; } else arr.push(rec);
@@ -1694,6 +1735,13 @@ function dayStats(d) {
     krw += v;                                   /* 총액은 언제나 m.krw — 줄이 여러 개여도 합계가 들어 있다 */
     moneyRowsOf(l).forEach((r) => { const k = r.cat || ""; krwCat[k] = (krwCat[k] || 0) + r.krw; });
   });
+  /* 장소 — 어디서 얼마나 있었고 얼마를 썼나(§3-3). "어디서 공부가 잘 되나"의 재료가 된다. */
+  const plcMin = {}, plcKrw = {};
+  logs.forEach((l) => {
+    const pl = placeOf(l); if (!pl) return;
+    plcMin[pl] = (plcMin[pl] || 0) + Math.max(0, l.end - l.start);
+    const v = krwOf(l); if (v) plcKrw[pl] = (plcKrw[pl] || 0) + v;
+  });
   /* 태그별 할일 달성 */
   const tagTasks = {};
   tasks.forEach((t) => { const k = t.tagId || "etc"; const o = tagTasks[k] = tagTasks[k] || { total: 0, done: 0 }; o.total++; if (t.done) o.done++; });
@@ -1701,7 +1749,7 @@ function dayStats(d) {
     date: d.date, total: tasks.length, done: tasks.filter((t) => t.done).length,
     rate: tasks.length ? tasks.filter((t) => t.done).length / tasks.length : null,
     planMin, actMin, kept, keepRate: planMin ? kept / planMin : null, byTag,
-    extra: Object.keys(extraKeys).length, accPlan, accAct, accN, tagTasks, krw, krwCat
+    extra: Object.keys(extraKeys).length, accPlan, accAct, accN, tagTasks, krw, krwCat, plcMin, plcKrw
   };
 }
 async function drawStats() {
@@ -1713,7 +1761,7 @@ async function drawStats() {
   const todayKey = keyOf(new Date());
   const t = map[todayKey] || dayStats(emptyDay(todayKey));
 
-  const last = (n) => { const o = []; for (let i = n - 1; i >= 0; i--) { const k = shiftKey(todayKey, -i); o.push(map[k] || { date: k, total: 0, done: 0, rate: null, planMin: 0, actMin: 0, kept: 0, keepRate: null, byTag: {}, extra: 0, accPlan: 0, accAct: 0, accN: 0, tagTasks: {}, krw: 0, krwCat: {} }); } return o; };
+  const last = (n) => { const o = []; for (let i = n - 1; i >= 0; i--) { const k = shiftKey(todayKey, -i); o.push(map[k] || { date: k, total: 0, done: 0, rate: null, planMin: 0, actMin: 0, kept: 0, keepRate: null, byTag: {}, extra: 0, accPlan: 0, accAct: 0, accN: 0, tagTasks: {}, krw: 0, krwCat: {}, plcMin: {}, plcKrw: {} }); } return o; };
   const w = last(7), m30 = last(30), d14 = last(14);
   const sum = (a, f) => a.reduce((s, x) => s + (f(x) || 0), 0);
   /* 주간 달성은 건수 합계 기준 — 할일이 한두 개뿐인 날이 평균을 흔들지 않게 */
@@ -1773,7 +1821,27 @@ async function drawStats() {
         return '<i style="background:' + c + '" title="' + d.date + " · " + (r == null ? "기록 없음" : Math.round(r * 100) + "%") + '"></i>';
       }).join("") +
     '</div><div class="legend"><span>왼쪽이 30일 전, 오른쪽이 오늘 · 진할수록 달성률이 높습니다</span></div></div></div>' +
-    moneySection() + habitSection() + timeSection();
+    moneySection() + placeSection() + habitSection() + timeSection();
+
+  /* 장소 — 최근 30일 동안 어디서 얼마나 있었고 얼마를 썼나(§3-3).
+     적은 적이 없으면 아무것도 보여주지 않는다. 뒤에 "장소별 달성률"이 붙을 자리다. */
+  function placeSection() {
+    const pm = {}, pk = {};
+    m30.forEach((d) => {
+      Object.keys(d.plcMin || {}).forEach((k) => pm[k] = (pm[k] || 0) + d.plcMin[k]);
+      Object.keys(d.plcKrw || {}).forEach((k) => pk[k] = (pk[k] || 0) + d.plcKrw[k]);
+    });
+    const keys = Object.keys(pm).sort((a, b) => pm[b] - pm[a]).slice(0, 10);
+    if (!keys.length) return "";
+    const mx = Math.max(1, ...keys.map((k) => pm[k]));
+    return '<div class="sec-t">장소 · 최근 30일</div>' +
+      '<div class="card"><div class="card-b"><div class="rows">' +
+        keys.map((k) =>
+          '<div class="row2"><span class="tag" style="--c:var(--plan)">' + esc(k) + "</span>" +
+          '<span class="bar"><i style="width:' + (pm[k] / mx * 100) + '%;--c:var(--plan)"></i></span>' +
+          '<span class="n">' + dur(pm[k]) + (pk[k] ? " · " + fmtKrw(pk[k]) + "원" : "") + "</span></div>").join("") +
+      '</div><div class="legend"><span>기록에 장소를 적으면 모입니다 · 막대는 머문 시간</span></div></div></div>';
+  }
 
   /* 지출 — 기록 블록에 적은 금액의 합계. 적은 게 하나도 없으면 아무것도 보여주지 않는다(로드맵 §3). */
   function moneySection() {
@@ -2351,7 +2419,7 @@ function fixWindow() {
   S.set.dayEnd = clamp(Math.round(S.set.dayEnd / 60) * 60, S.set.dayStart + 360, 1680);
   saveSet(); drawSettings();
 }
-function saveSet() { save("settings/app", { tags: S.set.tags, cats: S.set.cats, dayStart: S.set.dayStart, dayEnd: S.set.dayEnd }); }
+function saveSet() { save("settings/app", { tags: S.set.tags, cats: S.set.cats, places: S.set.places || [], dayStart: S.set.dayStart, dayEnd: S.set.dayEnd }); }
 
 /* 날짜·시간 칸은 작은 아이콘을 정확히 눌러야 열린다. 칸 어디를 눌러도 열리게 한다. */
 addEventListener("click", (e) => {
