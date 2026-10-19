@@ -152,6 +152,9 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 /* 기록에 딸려온 금액 — 가계부를 따로 켜지 않게 (로드맵 §3) */
 .blk .kw{font-style:normal;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:9.5px;font-weight:500;color:var(--actual);margin-left:4px;white-space:nowrap}
 .kwsum{font-family:var(--font-num);font-variant-numeric:tabular-nums;color:var(--actual)}
+/* 시트에 칸을 바로 늘리지 않고 칩으로 연다 — 폰에서 시트가 길어지는 걸 막는다 */
+.addchip{border:1px dashed var(--line);background:var(--surface-2);border-radius:999px;padding:8px 15px;font-size:12.5px;color:var(--muted)}
+.addchip:hover{border-color:var(--actual);color:var(--actual)}
 .tp{display:inline-flex;align-items:center;gap:3px}
 .tp select{flex:0 0 auto;width:auto;min-width:62px;font-family:var(--font-num);font-variant-numeric:tabular-nums}
 .tp b{color:var(--muted);font-weight:500}
@@ -539,7 +542,18 @@ const DEFAULT_TAGS = [
   { id: "fit", name: "운동", color: "#C2622A" },
   { id: "etc", name: "기타", color: "#7A7480" }
 ];
-const DEFAULT_SET = { tags: DEFAULT_TAGS, dayStart: 360, dayEnd: 1440 };
+/* 지출 분류는 활동 분류(위의 태그)와 다른 축이다 — 카공은 활동이 "학업"이어도 돈은 "카페"로 나간다.
+   한 축으로 묶으면 통계에서 커피값이 학업 지출로 잡힌다(사용자 지적 2026-10-19). */
+const DEFAULT_CATS = [
+  { id: "food", name: "식비", color: "#C2622A" },
+  { id: "cafe", name: "카페·간식", color: "#9A6B3F" },
+  { id: "tran", name: "교통", color: "#3F5BA9" },
+  { id: "life", name: "생필품", color: "#2F7A57" },
+  { id: "fun", name: "문화·여가", color: "#8A5BA9" },
+  { id: "heal", name: "의료·건강", color: "#B4891A" },
+  { id: "etcm", name: "기타", color: "#7A7480" }
+];
+const DEFAULT_SET = { tags: DEFAULT_TAGS, cats: DEFAULT_CATS, dayStart: 360, dayEnd: 1440 };
 
 /* ============================== store ============================== */
 /* One row per day at days/<YYYY-MM-DD>, config at settings/app, live timer at state/running.
@@ -711,6 +725,9 @@ function refreshRoutine(rid) {
 function day() { if (!S.day || S.day.date !== S.dateKey) S.day = emptyDay(S.dateKey); return S.day; }
 function saveDay() { const d = day(); d.updatedAt = Date.now(); hbDayCache = null; save("days/" + d.date, d); }
 function tag(id) { return S.set.tags.find((t) => t.id === id) || { id: "etc", name: "기타", color: "#7A7480" }; }
+/* 지출 분류(m.cat) — 활동 분류와 별개 축. 안 고른 기록은 "미분류"로 둔다(마음대로 끼워 넣지 않는다). */
+function cat(id) { return (S.set.cats || []).find((c) => c.id === id) || { id: "", name: "미분류", color: "#9A96A0" }; }
+function catOf(o) { const c = o && o.m ? o.m.cat : null; return c && (S.set.cats || []).some((x) => x.id === c) ? c : ""; }
 function task(id) { return day().tasks.find((t) => t.id === id) || null; }
 function labelOf(o) { const t = o.taskId ? task(o.taskId) : null; return t ? t.title : (o.label || "(제목 없음)"); }
 function colorOf(o) { const t = o.taskId ? task(o.taskId) : null; return tag(t ? t.tagId : o.tagId).color; }
@@ -736,6 +753,7 @@ render();
   watch("settings/app", (d) => {
     S.set = Object.assign(JSON.parse(JSON.stringify(DEFAULT_SET)), d || {});
     if (!Array.isArray(S.set.tags) || !S.set.tags.length) S.set.tags = JSON.parse(JSON.stringify(DEFAULT_TAGS));
+    if (!Array.isArray(S.set.cats) || !S.set.cats.length) S.set.cats = JSON.parse(JSON.stringify(DEFAULT_CATS));
     S.set.dayStart = clamp(Math.round(S.set.dayStart / 60) * 60, 0, 780);
     S.set.dayEnd = clamp(Math.round(S.set.dayEnd / 60) * 60, S.set.dayStart + 360, 1680);
     render();
@@ -881,7 +899,7 @@ function blockHTML(o, kind, isLive) {
   const mins = b - a, tiny = mins < 25;
   const memo = (o.note || "").trim(), kw = krwOf(o);
   return '<button class="blk' + (tiny ? " tiny" : "") + (isLive ? " live" : "") + (o.rid ? " rt" : "") + '" data-kind="' + kind + '" data-id="' + esc(o.id) +
-    '" title="' + esc(hhmm(a) + "–" + hhmm(b) + " " + labelOf(o) + (kw ? " · " + fmtKrw(kw) + "원" : "") + (memo ? " · " + memo : "")) +
+    '" title="' + esc(hhmm(a) + "–" + hhmm(b) + " " + labelOf(o) + (kw ? " · " + fmtKrw(kw) + "원" + (catOf(o) ? " (" + cat(catOf(o)).name + ")" : "") : "") + (memo ? " · " + memo : "")) +
     '" style="top:' + top + "%;height:calc(" + h + '% - 2px);--c:' + esc(colorOf(o)) + '">' +
     "<b>" + hhmm(a) + "–" + hhmm(b) + "</b><span>" + (o.rid ? '<i class="rtm">↻</i>' : "") + (memo ? '<i class="rtm">✎</i>' : "") + esc(labelOf(o)) +
     (kw ? '<i class="kw">' + fmtKrw(kw) + "원</i>" : "") + "</span>" +
@@ -1259,6 +1277,36 @@ function openSheet(html) {
   const f = $("#sheet").querySelector("input,select,textarea,button"); if (f) f.focus();
 }
 function tagOptions(cur) { return S.set.tags.map((t) => '<option value="' + esc(t.id) + '"' + (t.id === cur ? " selected" : "") + ">" + esc(t.name) + "</option>").join(""); }
+function catOptions(cur) {
+  return '<option value="">분류 없음</option>' + (S.set.cats || []).map((c) => '<option value="' + esc(c.id) + '"' + (c.id === cur ? " selected" : "") + ">" + esc(c.name) + "</option>").join("");
+}
+/* 금액은 평소엔 접혀 있고 (+)칩을 눌러야 열린다 — 돈 안 쓴 일과가 대부분이라 빈 칸이 자리만 차지했다(사용자 지적).
+   여는 순간 지출 분류도 같이 고른다. 나중에 수입·장소·사진도 이 칩 줄에 붙인다("칸을 늘리지 말고 칩을 늘린다"). */
+function moneyFieldHTML(o, p) {
+  const kw = krwOf(o), open = kw > 0;
+  return '<div class="fld">' +
+    '<button class="addchip" type="button" id="' + p + 'Chip"' + (open ? " hidden" : "") + '>＋ 금액</button>' +
+    '<div id="' + p + 'Body"' + (open ? "" : " hidden") + '><label for="' + p + 'Krw">금액 (원) · 지출 분류</label><div class="times">' +
+    '<input type="text" inputmode="numeric" id="' + p + 'Krw" maxlength="13" placeholder="예: 9000" value="' + (kw ? fmtKrw(kw) : "") + '">' +
+    '<select id="' + p + 'Cat" aria-label="지출 분류" style="flex:0 0 112px">' + catOptions(catOf(o)) + "</select>" +
+    '<button class="btn ghost" type="button" id="' + p + 'X" style="flex:0 0 auto">지우기</button></div>' +
+    '<div class="mini" style="color:var(--muted);margin-top:5px">통계 <b>지출</b>에 이 분류로 모입니다. 할일 분류(학업 등)와는 별개입니다.</div></div></div>';
+}
+function moneyFieldOn(p) {
+  const kb = $("#" + p + "Krw"), chip = $("#" + p + "Chip"), body = $("#" + p + "Body");
+  if (!kb) return;
+  chip.onclick = () => { chip.hidden = true; body.hidden = false; kb.focus(); };
+  kb.oninput = () => { const n = parseKrw(kb.value); kb.value = n ? fmtKrw(n) : ""; try { kb.setSelectionRange(kb.value.length, kb.value.length); } catch (e) { } };
+  $("#" + p + "X").onclick = () => { kb.value = ""; body.hidden = true; chip.hidden = false; };
+}
+/* 금액이 0이면 분류도 같이 버린다. m 안의 다른 키(나중의 kcal 등)는 보존. */
+function moneyFieldRead(p, prev) {
+  const mm = Object.assign({}, prev || null), kb = $("#" + p + "Krw");
+  const n = kb ? parseKrw(kb.value) : 0;
+  if (n) { mm.krw = n; const c = $("#" + p + "Cat").value; if (c) mm.cat = c; else delete mm.cat; }
+  else { delete mm.krw; delete mm.cat; }
+  return Object.keys(mm).length ? mm : null;
+}
 
 function taskSheet(t) {
   openSheet('<h3>할일 수정</h3>' +
@@ -1284,28 +1332,20 @@ function taskSheet(t) {
    `state/running`에 같이 저장돼 종료(또는 중지)할 때 그 기록으로 넘어간다. */
 function runSheet() {
   const r = S.running; if (!r) { render(); return; }
-  const kw = krwOf(r);
   openSheet('<h3>기록 중</h3>' +
     '<div class="fld"><label>지금 하는 일</label>' +
     '<div class="note-quiet">' + esc(r.label || "기록 중") + " · " + hhmm(r.startMin) + "부터" + (r.paused ? " (중지됨)" : "") + "</div></div>" +
-    '<div class="fld"><label for="rKrw">금액 (원) · 비워 두면 안 셉니다</label><div class="times">' +
-    '<input type="text" inputmode="numeric" id="rKrw" maxlength="13" placeholder="예: 9000" value="' + (kw ? fmtKrw(kw) : "") + '">' +
-    '<button class="btn ghost" id="rKrwX" type="button" style="flex:0 0 auto">지우기</button></div>' +
-    '<div class="mini" style="color:var(--muted);margin-top:5px">끝낼 때 이 기록에 같이 들어갑니다.</div></div>' +
+    moneyFieldHTML(r, "r") +
     '<div class="fld"><label for="rNote">메모</label>' +
     '<textarea id="rNote" rows="2" maxlength="300" placeholder="무엇을 했는지 남기고 싶은 말">' + esc(r.note || "") + "</textarea></div>" +
     '<div class="sheet-foot">' +
     '<button class="btn ghost" id="rPause">' + (r.paused ? "이어서" : "중지") + "</button>" +
     '<button class="btn go-save" id="rKeep">저장</button>' +
     '<button class="btn" id="rStop" style="background:var(--actual)">종료</button></div>');
-  const kb = $("#rKrw");
-  kb.oninput = () => { const n = parseKrw(kb.value); kb.value = n ? fmtKrw(n) : ""; try { kb.setSelectionRange(kb.value.length, kb.value.length); } catch (e) { } };
-  $("#rKrwX").onclick = () => { kb.value = ""; kb.focus(); };
+  moneyFieldOn("r");
   const take = () => {
     const cur = S.running; if (!cur) return null;
-    const n = parseKrw(kb.value), mm = Object.assign({}, cur.m || null);
-    if (n) mm.krw = n; else delete mm.krw;
-    const nr = Object.assign({}, cur, { m: Object.keys(mm).length ? mm : null, note: $("#rNote").value.trim().slice(0, 300) });
+    const nr = Object.assign({}, cur, { m: moneyFieldRead("r", cur.m), note: $("#rNote").value.trim().slice(0, 300) });
     S.running = nr; save("state/running", nr);
     return nr;
   };
@@ -1332,10 +1372,7 @@ function blockSheet(kind, id, preset) {
     (isPlan && o ? '<div class="fld"><label>실제 기록으로 보내기</label><div class="times">' +
       '<button class="btn ghost" id="pNow" style="flex:1">지금 시작</button>' +
       '<button class="btn ghost" id="pAs" style="flex:1">계획대로 기록</button></div></div>' : "") +
-    (isPlan ? "" : '<div class="fld"><label for="bKrw">금액 (원) · 비워 두면 안 셉니다</label><div class="times">' +
-      '<input type="text" inputmode="numeric" id="bKrw" maxlength="13" placeholder="예: 9000" value="' + (krwOf(cur) ? fmtKrw(krwOf(cur)) : "") + '">' +
-      '<button class="btn ghost" id="bKrwX" type="button" style="flex:0 0 auto">지우기</button></div>' +
-      '<div class="mini" style="color:var(--muted);margin-top:5px">이 일과에서 쓴 돈. 통계 탭에 합계가 모입니다.</div></div>') +
+    (isPlan ? "" : moneyFieldHTML(cur, "b")) +
     '<div class="fld"><label for="bNote">메모</label>' +
     '<textarea id="bNote" rows="2" maxlength="300" placeholder="' + (isPlan ? "예: 14쪽까지 · 17시부터 15~22쪽" : "무엇을 했는지 남기고 싶은 말") + '">' + esc(cur.note || "") + "</textarea></div>" +
     '<div class="sheet-foot">' + (o ? '<button class="btn danger del" id="bDel">삭제</button>' : "") +
@@ -1349,11 +1386,7 @@ function blockSheet(kind, id, preset) {
   };
   timeSelOn("bStart", null, false, sync); timeSelOn("bEnd", null, false, sync); sync();
   $("#bTask").onchange = () => { $("#freeWrap").hidden = !!$("#bTask").value; };
-  if (!isPlan) {
-    const kb = $("#bKrw");
-    kb.oninput = () => { const n = parseKrw(kb.value); kb.value = n ? fmtKrw(n) : ""; try { kb.setSelectionRange(kb.value.length, kb.value.length); } catch (e) { } };
-    $("#bKrwX").onclick = () => { kb.value = ""; kb.focus(); };
-  }
+  if (!isPlan) moneyFieldOn("b");
   if (isPlan && o) {
     $("#pNow").onclick = () => {
       beginRun(o.taskId, o.taskId ? labelOf(o) : (o.label || "기록 중"), o.taskId ? (task(o.taskId) || {}).tagId : o.tagId);
@@ -1377,12 +1410,8 @@ function blockSheet(kind, id, preset) {
       start: roundTo(a, 10), end: roundTo(b, 10)
     };
     rec.note = ($("#bNote") ? $("#bNote").value.trim().slice(0, 300) : "");
-    /* 금액 — 있으면 m.krw에만 담고, m 안의 다른 키(나중의 kcal 등)는 그대로 남긴다. 0이면 필드를 아예 안 만든다. */
-    if (!isPlan) {
-      const kw = parseKrw($("#bKrw") ? $("#bKrw").value : ""), mm = Object.assign({}, (o && o.m) || null);
-      if (kw) mm.krw = kw; else delete mm.krw;
-      if (Object.keys(mm).length) rec.m = mm;
-    } else if (o && o.m) rec.m = o.m;
+    if (!isPlan) { const mm = moneyFieldRead("b", o && o.m); if (mm) rec.m = mm; }
+    else if (o && o.m) rec.m = o.m;
     if (rec.end <= rec.start) rec.end = rec.start + 10;
     if (o) { const i = arr.findIndex((x) => x.id === o.id); arr[i] = rec; } else arr.push(rec);
     saveDay(); closeSheet(); render();
@@ -1566,14 +1595,14 @@ function dayStats(d) {
     const a = logs.filter((x) => x.taskId === t.id).reduce((s, x) => s + Math.max(0, x.end - x.start), 0);
     if (p > 0 && a > 0) { accPlan += p; accAct += a; accN++; }
   });
-  /* 기록에 딸려온 금액 (로드맵 §3) — 지출은 별도 종류가 아니라 일과에 붙은 숫자다 */
-  let krw = 0; const krwTag = {};
+  /* 기록에 딸려온 금액 (로드맵 §3) — 지출은 별도 종류가 아니라 일과에 붙은 숫자다.
+     모으는 축은 활동 분류가 아니라 지출 분류(m.cat)다. 안 고른 건 ""(미분류)로 따로 센다. */
+  let krw = 0; const krwCat = {};
   logs.forEach((l) => {
     const v = krwOf(l); if (!v) return;
     krw += v;
-    const t = l.taskId ? (tasks.find((x) => x.id === l.taskId) || {}) : l;
-    const k = t.tagId || l.tagId || "etc";
-    krwTag[k] = (krwTag[k] || 0) + v;
+    const k = (l.m && l.m.cat) || "";
+    krwCat[k] = (krwCat[k] || 0) + v;
   });
   /* 태그별 할일 달성 */
   const tagTasks = {};
@@ -1582,7 +1611,7 @@ function dayStats(d) {
     date: d.date, total: tasks.length, done: tasks.filter((t) => t.done).length,
     rate: tasks.length ? tasks.filter((t) => t.done).length / tasks.length : null,
     planMin, actMin, kept, keepRate: planMin ? kept / planMin : null, byTag,
-    extra: Object.keys(extraKeys).length, accPlan, accAct, accN, tagTasks, krw, krwTag
+    extra: Object.keys(extraKeys).length, accPlan, accAct, accN, tagTasks, krw, krwCat
   };
 }
 async function drawStats() {
@@ -1594,7 +1623,7 @@ async function drawStats() {
   const todayKey = keyOf(new Date());
   const t = map[todayKey] || dayStats(emptyDay(todayKey));
 
-  const last = (n) => { const o = []; for (let i = n - 1; i >= 0; i--) { const k = shiftKey(todayKey, -i); o.push(map[k] || { date: k, total: 0, done: 0, rate: null, planMin: 0, actMin: 0, kept: 0, keepRate: null, byTag: {}, extra: 0, accPlan: 0, accAct: 0, accN: 0, tagTasks: {}, krw: 0, krwTag: {} }); } return o; };
+  const last = (n) => { const o = []; for (let i = n - 1; i >= 0; i--) { const k = shiftKey(todayKey, -i); o.push(map[k] || { date: k, total: 0, done: 0, rate: null, planMin: 0, actMin: 0, kept: 0, keepRate: null, byTag: {}, extra: 0, accPlan: 0, accAct: 0, accN: 0, tagTasks: {}, krw: 0, krwCat: {} }); } return o; };
   const w = last(7), m30 = last(30), d14 = last(14);
   const sum = (a, f) => a.reduce((s, x) => s + (f(x) || 0), 0);
   /* 주간 달성은 건수 합계 기준 — 할일이 한두 개뿐인 날이 평균을 흔들지 않게 */
@@ -1662,8 +1691,10 @@ async function drawStats() {
     if (!tot30) return "";
     const mk = todayKey.slice(0, 7);
     const mTot = Object.keys(map).filter((k) => k.slice(0, 7) === mk).reduce((s, k) => s + (map[k].krw || 0), 0);
-    const kt = {}; m30.forEach((d) => Object.keys(d.krwTag || {}).forEach((k) => kt[k] = (kt[k] || 0) + d.krwTag[k]));
+    const kt = {}; m30.forEach((d) => Object.keys(d.krwCat || {}).forEach((k) => kt[k] = (kt[k] || 0) + d.krwCat[k]));
     const kMax = Math.max(1, ...Object.values(kt));
+    /* 설정에 있는 분류를 큰 금액 순으로, 미분류("")는 맨 아래 */
+    const kKeys = Object.keys(kt).sort((a, b) => (a === "" ? 1 : b === "" ? -1 : kt[b] - kt[a]));
     return '<div class="sec-t">지출 · 기록에 적은 금액</div>' +
       '<div class="stat-grid">' +
         card("오늘", fmtKrw(t.krw) + "원", t.krw ? "기록에 적은 금액" : "아직 없습니다", null, "var(--actual)") +
@@ -1671,11 +1702,14 @@ async function drawStats() {
         card("이번 달", fmtKrw(mTot) + "원", mk.replace("-", "년 ") + "월", null, "var(--actual)") +
       "</div>" +
       '<div class="card"><div class="card-b"><div class="rows">' +
-        S.set.tags.filter((g) => kt[g.id]).sort((a, b) => kt[b.id] - kt[a.id]).map((g) =>
+        kKeys.map((k) => { const g = cat(k); return '' +
           '<div class="row2"><span class="tag" style="--c:' + esc(g.color) + '">' + esc(g.name) + "</span>" +
-          '<span class="bar"><i style="width:' + (kt[g.id] / kMax * 100) + "%;--c:" + esc(g.color) + '"></i></span>' +
-          '<span class="n">' + fmtKrw(kt[g.id]) + "원</span></div>").join("") +
-      '</div><div class="legend"><span>최근 30일 · 태그별 · 실제 기록 블록에 적은 금액만 셉니다(가계부 전체가 아닙니다)</span></div></div></div>';
+          '<span class="bar"><i style="width:' + (kt[k] / kMax * 100) + "%;--c:" + esc(g.color) + '"></i></span>' +
+          '<span class="n">' + fmtKrw(kt[k]) + "원</span></div>"; }).join("") +
+      /* legend의 <b>는 색 네모 전용이라 글자를 넣으면 안 된다(9px 상자로 찌그러진다) */
+      '</div><div class="legend"><span>최근 30일 · 지출 분류별 (할일 분류와 별개입니다) · 실제 기록에 적은 금액만 셉니다</span>' +
+      (kt[""] ? '<span>"미분류"는 금액만 적고 분류를 안 고른 기록입니다 — 블록을 눌러 고르면 여기로 옮겨집니다.</span>' : "") +
+      "</div></div></div>";
   }
 
   /* 시간은 평가 기준이 아니라 다음 계획을 세우기 위한 참고. 일부러 작고 조용하게. */
@@ -1987,6 +2021,12 @@ function drawSettings() {
     '<div class="sec-t">분류 태그</div>' +
     '<div class="card"><div class="card-b"><div class="taglist" id="tagList"></div>' +
       '<button class="btn ghost" id="addTag" style="margin-top:10px;width:100%">태그 추가</button></div></div>' +
+    '<div class="sec-t">지출 분류</div>' +
+    '<div class="card"><div class="card-b"><div class="taglist" id="catList"></div>' +
+      '<button class="btn ghost" id="addCat" style="margin-top:10px;width:100%">분류 추가</button>' +
+      '<p class="rt-note">기록에 금액을 적을 때 고르는 <b>돈 쓴 갈래</b>입니다. 위의 분류 태그(할일·시간을 나누는 축)와는 별개입니다 — ' +
+      '카페에서 공부하면 할일은 <b>학업</b>, 지출은 <b>카페</b>로 각각 남습니다. 통계의 지출 구역은 이 분류로 모읍니다.</p>' +
+    "</div></div>" +
     '<div class="sec-t">요일 루틴</div>' +
     '<div class="card"><div class="card-b"><div class="taglist" id="rtList"></div>' +
       '<button class="btn ghost" id="addRt" style="margin-top:10px;width:100%">루틴 추가</button>' +
@@ -2062,6 +2102,23 @@ function drawSettings() {
     saveSet(); drawSettings();
   };
 
+  /* 지출 분류 — 태그와 같은 모양이지만 축이 다르다. 순서 바꾸기는 아직 없음(통계는 금액 순으로 정렬된다). */
+  const cl = $("#catList");
+  cl.innerHTML = (S.set.cats || []).map((c, i) =>
+    '<div class="tagedit" data-i="' + i + '"><input type="color" value="' + esc(c.color) + '" aria-label="색"><input type="text" value="' + esc(c.name) + '" maxlength="14" aria-label="분류 이름">' +
+    '<button class="iconbtn" data-del="' + i + '" title="삭제">✕</button></div>').join("");
+  cl.querySelectorAll(".tagedit").forEach((row) => {
+    const i = +row.dataset.i;
+    row.querySelector('input[type=color]').oninput = (e) => { S.set.cats[i].color = e.target.value; saveSet(); };
+    row.querySelector('input[type=text]').onchange = (e) => { S.set.cats[i].name = e.target.value.trim() || S.set.cats[i].name; saveSet(); };
+    /* 지운 분류를 쓰던 기록은 "미분류"로 보인다 — 기록 자체는 건드리지 않는다(다시 만들면 되살아난다). */
+    row.querySelector("[data-del]").onclick = () => { S.set.cats.splice(i, 1); saveSet(); drawSettings(); };
+  });
+  $("#addCat").onclick = () => {
+    S.set.cats.push({ id: "c" + uid().slice(0, 5), name: "새 분류", color: "#5A7D8C" });
+    saveSet(); drawSettings();
+  };
+
   const rl = $("#rtList");
   rl.innerHTML = S.rt.items.length ? S.rt.items.map((r, i) =>
     '<div class="rt-row" data-i="' + i + '">' +
@@ -2116,7 +2173,7 @@ function fixWindow() {
   S.set.dayEnd = clamp(Math.round(S.set.dayEnd / 60) * 60, S.set.dayStart + 360, 1680);
   saveSet(); drawSettings();
 }
-function saveSet() { save("settings/app", { tags: S.set.tags, dayStart: S.set.dayStart, dayEnd: S.set.dayEnd }); }
+function saveSet() { save("settings/app", { tags: S.set.tags, cats: S.set.cats, dayStart: S.set.dayStart, dayEnd: S.set.dayEnd }); }
 
 /* 날짜·시간 칸은 작은 아이콘을 정확히 눌러야 열린다. 칸 어디를 눌러도 열리게 한다. */
 addEventListener("click", (e) => {
