@@ -281,6 +281,14 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .goals .g-due.late{color:var(--actual)}
 .goals li.done .g-title{color:var(--muted);text-decoration:line-through}
 .goals.ro li{grid-template-columns:16px 1fr auto}
+/* 메모 목록 — 목표 목록과 같은 줄 모양을 쓰되 날짜 칸이 없다 */
+.goals.notes li{grid-template-columns:24px 1fr 28px}
+.goals .n-chk.memo{color:var(--muted);border-style:dashed;background:transparent;font-size:11px}
+.goals li.done .n-text{color:var(--muted);text-decoration:line-through}
+#noteChip.has{border-color:var(--plan);color:var(--plan)}
+/* 메모 추가줄엔 날짜 칸이 없으니 한 줄로 둔다(목표 추가줄은 폰에서 두 줄로 접힌다) */
+.g-add-row.n-row{flex-wrap:nowrap}
+.g-add-row.n-row .g-new{flex:1 1 auto;min-width:0}
 .goals .g-mk{font-family:var(--font-num);color:var(--ok);text-align:center}
 .goals .g-ro{font-size:13.5px}
 .goals li.done .g-ro{color:var(--muted);text-decoration:line-through}
@@ -421,6 +429,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
       <div class="d" id="dateLabel">—</div>
       <div class="dow" id="dowLabel"></div>
       <div class="spacer"></div>
+      <button class="chip-btn" id="noteChip" title="시간으로 적기 애매한 것 — 목표 탭의 메모로 갑니다">메모</button>
       <button class="chip-btn" id="fillBtn" hidden title="지나간 계획을 실제 기록으로 한 번에 옮깁니다">계획대로 채우기</button>
       <button class="chip-btn" id="goToday">오늘</button>
     </div>
@@ -703,6 +712,7 @@ const S = {
   rt: { items: [] },
   pane: 0,
   hb: { items: [] },
+  nt: { items: [] },
   ov: { mode: "month", anchor: keyOf(new Date()), m: { items: [] }, w: { items: [] }, weekSum: {}, unsubs: [], subKey: "" }
 };
 function emptyDay(k) { return { date: k, tasks: [], plans: [], logs: [], rApplied: [] }; }
@@ -780,6 +790,13 @@ render();
     S.hb = { items: Array.isArray(d && d.items) ? d.items : [], seeded: S.hb.seeded };
     if (!d) setTimeout(() => { if (!(S.hb.items || []).length) seedHabits(); }, 1200);
     render();
+  });
+  /* 메모 — 날짜에도 달성률에도 안 묶이는 목록(로드맵 §7-10). days/* 를 안 건드리므로
+     통계가 이 목록을 영영 보지 못한다 = 달성률에서 저절로 빠진다. */
+  watch("settings/notes", (d) => {
+    S.nt = { items: Array.isArray(d && d.items) ? d.items : [] };
+    if (S.view === "over") drawOver();
+    drawNoteChip();
   });
   watch("state/running", (d) => { S.running = d && (d.startMs || d.paused) ? d : null; render(); });
   openDay(S.dateKey);
@@ -1892,6 +1909,59 @@ function addGoal(which, title, due) {
   saveGoals(which); return true;
 }
 
+function saveNt() { save("settings/notes", { items: S.nt.items }); }
+function ntFind(id) { return (S.nt.items || []).find((x) => x && x.id === id); }
+/* 메모 목록 조작 — 길게 누르면 ☐ 할 것 ↔ ✎ 메모. done 키 자체를 넣고 빼서 구분한다. */
+function bindNotes(host) {
+  const redraw = () => { saveNt(); drawOver(); drawNoteChip(); };
+  host.querySelectorAll(".n-chk").forEach((b) => {
+    const id = b.getAttribute("data-id");
+    let hold = null, held = false;
+    const start = () => { held = false; hold = setTimeout(() => { held = true; swapKind(id); redraw(); }, 450); };
+    const stop = () => { if (hold) { clearTimeout(hold); hold = null; } };
+    b.addEventListener("pointerdown", start);
+    b.addEventListener("pointerup", stop);
+    b.addEventListener("pointerleave", stop);
+    b.addEventListener("pointercancel", stop);
+    b.onclick = () => {
+      if (held) { held = false; return; }          /* 길게 눌러 바뀐 뒤 따라오는 클릭은 무시 */
+      const x = ntFind(id); if (!x || readOnly) return;
+      if (x.done === undefined || x.done === null) return;   /* 메모는 체크하지 않는다 */
+      x.done = !x.done; x.doneAt = x.done ? keyOf(new Date()) : null;
+      redraw();
+    };
+  });
+  host.querySelectorAll(".n-text").forEach((el) => {
+    el.onchange = () => { const x = ntFind(el.getAttribute("data-id")); if (!x) return; x.text = el.value.trim().slice(0, 200); saveNt(); drawNoteChip(); };
+  });
+  host.querySelectorAll(".n-del").forEach((b) => {
+    b.onclick = () => { const i = (S.nt.items || []).findIndex((x) => x.id === b.getAttribute("data-id")); if (i > -1) S.nt.items.splice(i, 1); redraw(); };
+  });
+  const add = () => {
+    const el = host.querySelector(".n-new"); if (!el) return;
+    const t = el.value.trim(); if (!t) return;
+    S.nt.items.unshift({ id: uid(), text: t.slice(0, 200), done: false, at: keyOf(new Date()) });
+    el.value = ""; redraw();
+    const n = $("#viewOver .n-new"); if (n) n.focus();
+  };
+  const nb = host.querySelector(".n-add"); if (nb) nb.onclick = add;
+  const ni = host.querySelector(".n-new");
+  if (ni) ni.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); add(); } };
+  const cl = host.querySelector(".n-clear");
+  if (cl) cl.onclick = () => { S.nt.items = (S.nt.items || []).filter((x) => !x.done); redraw(); };
+}
+function swapKind(id) {
+  const x = ntFind(id); if (!x || readOnly) return;
+  if (x.done === undefined || x.done === null) { x.done = false; }   /* 메모 → 할 것 */
+  else { delete x.done; delete x.doneAt; }                            /* 할 것 → 메모 */
+}
+/* 오늘 탭에서도 몇 개 남았는지 보이게 — 누르면 목표 탭의 메모로 간다 */
+function drawNoteChip() {
+  const b = $("#noteChip"); if (!b) return;
+  const n = (S.nt.items || []).filter((x) => !x.done).length;
+  b.textContent = n ? "메모 " + n : "메모";
+  b.classList.toggle("has", !!n);
+}
 async function drawOver(force) {
   ovWatch();
   const host = $("#viewOver"), mode = S.ov.mode, anchor = S.ov.anchor, todayKey = keyOf(new Date());
@@ -1911,7 +1981,7 @@ async function drawOver(force) {
         '<button class="nav" id="ovNext" title="다음">›</button>' +
       "</div>" +
     "</div>" +
-    (mode === "month" ? monthBody() : weekBody());
+    (mode === "month" ? monthBody() : weekBody()) + noteBody();
 
   $("#ovMonth").onclick = () => { S.ov.mode = "month"; drawOver(); loadWeekSummary(); loadHabitDays(); };
   $("#ovWeek").onclick = () => { S.ov.mode = "week"; drawOver(); };
@@ -1925,6 +1995,8 @@ async function drawOver(force) {
   host.querySelectorAll("[data-week]").forEach((el) => {
     el.onclick = () => { S.ov.anchor = el.getAttribute("data-week"); S.ov.mode = "week"; drawOver(); };
   });
+  bindNotes(host);
+  if (S.ov.jump) { S.ov.jump = false; const c = $("#noteTop"); if (c) requestAnimationFrame(() => c.scrollIntoView({ block: "start" })); }
   host.querySelectorAll(".gl").forEach((box) => {
     const which = box.getAttribute("data-which");
     box.querySelectorAll(".g-chk").forEach((b) => {
@@ -1987,6 +2059,39 @@ async function drawOver(force) {
   function ti2(which) { const b = host.querySelector('.gl[data-which="' + which + '"] .g-new'); if (b) b.focus(); }
 
   /* ---- 목표 목록 한 덩어리 ---- */
+  /* ---- 메모 (로드맵 §7-10) ----
+     "뭐 확인하기 / 뭐 사기"처럼 시간으로 적기 애매한 것들. 할일과 셋 다 다르다:
+     ① 달성률에 안 들어간다(날짜 문서가 아니라 settings/notes에 따로 산다)
+     ② 날짜에 안 묶인다(그래서 저절로 이월된다)
+     ③ 체크 없는 메모도 섞어 둘 수 있다(done 키가 없으면 메모). */
+  function noteBody() {
+    const its = S.nt.items || [];
+    const live = its.filter((x) => !x.done), done = its.filter((x) => x.done);
+    const row = (x) => {
+      const memo = x.done === undefined || x.done === null;
+      return '<li class="' + (x.done ? "done" : "") + '">' +
+        '<button class="g-chk n-chk' + (memo ? " memo" : "") + '" data-id="' + esc(x.id) + '" aria-pressed="' + (!!x.done) + '" ' +
+        'title="' + (memo ? "메모입니다 · 길게 누르면 체크하는 할 것으로 바뀝니다" : "완료 표시 · 길게 누르면 체크 없는 메모로 바뀝니다") + '">' +
+        (memo ? "✎" : (x.done ? "✓" : "")) + "</button>" +
+        '<input class="g-title n-text" data-id="' + esc(x.id) + '" type="text" maxlength="200" value="' + esc(x.text || "") + '">' +
+        '<button class="iconbtn n-del" data-id="' + esc(x.id) + '" title="삭제">✕</button></li>';
+    };
+    return '<div class="sec-t" id="noteTop">메모</div>' +
+      '<div class="card" id="noteCard"><div class="card-h"><h2>적어 둘 것</h2>' +
+        '<span class="g-count">' + (live.length ? live.length + "개 남음" : its.length ? "다 했습니다" : "") + "</span></div>" +
+      '<div class="card-b">' +
+        (its.length
+          ? '<ul class="goals notes">' + live.map(row).join("") + done.map(row).join("") + "</ul>"
+          : '<div class="empty"><b>비어 있습니다</b>확인할 것·살 것처럼 시간으로 적기 애매한 걸 두세요. 날짜에 묶이지 않고 달성률에도 들어가지 않습니다.</div>') +
+        '<div class="g-add-row n-row">' +
+          '<input class="g-new n-new" type="text" maxlength="200" placeholder="적어 두기 (예: 장학금 신청 확인)">' +
+          '<button class="btn n-add">추가</button>' +
+        "</div>" +
+        '<div class="legend"><span>체크 아이콘을 길게 누르면 ☐ 할 것 ↔ ✎ 메모가 바뀝니다</span>' +
+        (done.length ? '<span><button class="lnk n-clear">완료한 것 ' + done.length + "개 지우기</button></span>" : "") +
+      "</div></div></div>";
+  }
+
   function goalList(which, title, hint, rangeStart, rangeEnd) {
     const list = goalsOf(which).slice().sort((a, b) => (a.done - b.done) || ((a.due || "9") < (b.due || "9") ? -1 : 1));
     const done = list.filter((g) => g.done).length;
@@ -2264,6 +2369,7 @@ $("#tabToday").onclick = () => {
 };
 $("#tabStats").onclick = () => { S.view = "stats"; render(); drawStats(); };
 $("#tabOver").onclick = () => { S.view = "over"; S.ov.anchor = keyOf(new Date()); render(); drawOver(); loadWeekSummary(); loadHabitDays(true); };
+$("#noteChip").onclick = () => { S.ov.jump = true; $("#tabOver").click(); };
 $("#tabSet").onclick = () => { S.view = "set"; render(); };
 $("#prevDay").onclick = () => openDay(shiftKey(S.dateKey, -1));
 $("#nextDay").onclick = () => openDay(shiftKey(S.dateKey, 1));
