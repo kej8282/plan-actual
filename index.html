@@ -156,6 +156,18 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .chiprow{display:flex;gap:7px;flex-wrap:wrap}
 .addchip.sm{padding:5px 11px;font-size:11.5px;border-style:solid;border-radius:999px}
 .plcs .addchip.sm{color:var(--ink)}
+.phwrap{display:flex;gap:10px;align-items:flex-start}
+.phthumb{width:92px;height:92px;flex:0 0 auto;object-fit:cover;border-radius:9px;border:1px solid var(--line);background:var(--surface-2);cursor:zoom-in}
+.phside{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.overlay.photo{align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.82);cursor:zoom-out}
+.overlay.photo img{max-width:100%;max-height:92vh;border-radius:10px;object-fit:contain}
+/* 달력 칸 — 사진은 배경으로 깔고 글자는 덮개 위에 올린다 */
+.cal .cell.hasph{background-size:cover;background-position:center}
+.cal .cell.hasph .dn{position:relative;z-index:2;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.75)}
+.cal .cell.hasph::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(0,0,0,.42),rgba(0,0,0,.14));z-index:1}
+.cal .cell .tk{position:relative;z-index:2;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:8.5px;line-height:1;color:var(--muted);text-align:center}
+.cal .cell.hasph .tk{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+.cal .cell.hasph .hdots{position:relative;z-index:2}
 /* 시트에 칸을 바로 늘리지 않고 칩으로 연다 — 폰에서 시트가 길어지는 걸 막는다 */
 .addchip{border:1px dashed var(--line);background:var(--surface-2);border-radius:999px;padding:8px 15px;font-size:12.5px;color:var(--muted)}
 .addchip:hover{border-color:var(--actual);color:var(--actual)}
@@ -502,6 +514,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 </div>
 
 <div class="overlay" id="overlay" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<div class="overlay photo" id="photoOv" hidden><img id="photoImg" alt="사진"></div>
 
 <script>
 /* ============================== helpers ============================== */
@@ -590,7 +603,8 @@ let DB = null, canWrite = true, readOnly = false;
 const LS = {
   read(p) { try { const r = localStorage.getItem("pa:" + p); return r ? JSON.parse(r) : null; } catch (e) { return null; } },
   write(p, v) { try { localStorage.setItem("pa:" + p, JSON.stringify(v)); } catch (e) { } },
-  keys(pfx) { const p = "pa:" + (pfx || ""), o = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(p)) o.push(k.slice(3)); } } catch (e) { } return o; }
+  keys(pfx) { const p = "pa:" + (pfx || ""), o = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(p)) o.push(k.slice(3)); } } catch (e) { } return o; },
+  remove(p) { try { localStorage.removeItem("pa:" + p); } catch (e) { } }
 };
 
 const subs = new Map();   // path -> callback
@@ -651,6 +665,12 @@ async function readColl(name, field, limit) {
   } catch (e) { return []; }
 }
 function readDays(limit) { return readColl("days", "date", limit); }
+/* 사진처럼 문서 하나를 통째로 버려야 할 때. 기록에서 떼어 내면 남은 문서는 아무도 안 읽는 고아가 된다. */
+async function del(path) {
+  if (readOnly) return;
+  pend.delete(path); mine.set(path, Date.now());
+  try { if (DB) await DB.doc(path).delete(); else LS.remove(path); } catch (e) { }
+}
 /* fb.js calls window.__fbResolve(api); if it never loads (opened as a plain file), fall back to local mode. */
 let FB = null;
 const fbReady = new Promise((res) => {
@@ -675,12 +695,17 @@ function askLogin(fb) {
     };
   });
 }
-function exportAll() {
+/* 백업 — 사진은 파일을 수십 MB로 키우므로 넣을지 매번 고른다(사용자 결정 2026-10-19). */
+function exportAll(withPhotos) {
   readDays(100000).then(async (days) => {
-    const out = { app: "plan-actual", v: 2, exportedAt: new Date().toISOString(), days: days, goals: await readColl("goals", "id", 2000), settings: await readOnce("settings/app"), routines: await readOnce("settings/routines") };
+    const out = { app: "plan-actual", v: 2, exportedAt: new Date().toISOString(), days: days, goals: await readColl("goals", "id", 2000), settings: await readOnce("settings/app"), routines: await readOnce("settings/routines"), notes: await readOnce("settings/notes"), habits: await readOnce("settings/habits") };
+    if (withPhotos) {
+      note("사진까지 모으는 중입니다…");
+      out.photos = await readColl("photos", "at", 100000);
+    }
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: "application/json" }));
-    a.download = "plan-actual-" + keyOf(new Date()) + ".json";
+    a.download = "plan-actual-" + keyOf(new Date()) + (withPhotos ? "-사진포함" : "") + ".json";
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   });
@@ -696,6 +721,9 @@ function importAll(file) {
       if (o.settings) save("settings/app", o.settings);
       if (o.routines) save("settings/routines", o.routines);
       if (Array.isArray(o.goals)) o.goals.forEach((g) => { if (g && g.id) save("goals/" + g.id, g); });
+      if (o.notes) save("settings/notes", o.notes);
+      if (o.habits) save("settings/habits", o.habits);
+      if (Array.isArray(o.photos)) o.photos.forEach((ph) => { if (ph && ph.id && ph.d) save("photos/" + ph.id, ph); });
       setTimeout(() => location.reload(), 1500);
     } catch (e) { alert("가져올 수 없는 파일입니다."); }
   };
@@ -904,7 +932,7 @@ function drawTimeline() {
   let live = "";
   if (S.running && !S.running.paused && S.running.dateKey === d.date) {
     const s = S.running.startMin, e = Math.max(s + 5, nowMin());
-    live = blockHTML({ id: "__live", taskId: S.running.taskId, label: S.running.label, tagId: S.running.tagId, start: s, end: e, note: S.running.note || "", m: S.running.m || null, place: S.running.place || "" }, "log", true);
+    live = blockHTML({ id: "__live", taskId: S.running.taskId, label: S.running.label, tagId: S.running.tagId, start: s, end: e, note: S.running.note || "", m: S.running.m || null, place: S.running.place || "", ph: S.running.ph || "", pht: S.running.pht || "" }, "log", true);
   }
   $("#trackAct").innerHTML = d.logs.slice().sort((a, b) => a.start - b.start).map((l) => blockHTML(l, "log")).join("") + live;
   document.querySelectorAll(".js-manual").forEach((b) => { b.hidden = readOnly || (b.id === "manualM" && S.pane !== 1); });
@@ -933,11 +961,11 @@ function blockHTML(o, kind, isLive) {
   if (b <= a) return "";
   const top = ((a - st) / 10) * 100 / span, h = ((b - a) / 10) * 100 / span;
   const mins = b - a, tiny = mins < 25;
-  const memo = (o.note || "").trim(), kw = krwOf(o), plc = placeOf(o);
+  const memo = (o.note || "").trim(), kw = krwOf(o), plc = placeOf(o), hasPh = !!photoIdOf(o);
   return '<button class="blk' + (tiny ? " tiny" : "") + (isLive ? " live" : "") + (o.rid ? " rt" : "") + '" data-kind="' + kind + '" data-id="' + esc(o.id) +
     '" title="' + esc(hhmm(a) + "–" + hhmm(b) + " " + labelOf(o) + (plc ? " @" + plc : "") + (kw ? " · " + fmtKrw(kw) + "원" + kwBreak(o) : "") + (memo ? " · " + memo : "")) +
     '" style="top:' + top + "%;height:calc(" + h + '% - 2px);--c:' + esc(colorOf(o)) + '">' +
-    "<b>" + hhmm(a) + "–" + hhmm(b) + "</b><span>" + (o.rid ? '<i class="rtm">↻</i>' : "") + (memo ? '<i class="rtm">✎</i>' : "") + esc(labelOf(o)) +
+    "<b>" + hhmm(a) + "–" + hhmm(b) + "</b><span>" + (o.rid ? '<i class="rtm">↻</i>' : "") + (memo ? '<i class="rtm">✎</i>' : "") + (hasPh ? '<i class="rtm">▦</i>' : "") + esc(labelOf(o)) +
     (kw ? '<i class="kw">' + fmtKrw(kw) + "원</i>" : "") + (plc ? '<i class="plc">@' + esc(plc) + "</i>" : "") + "</span>" +
     (memo ? '<span class="nt">' + esc(memo) + "</span>" : "") + "</button>";
 }
@@ -1064,6 +1092,7 @@ async function commitSegment(r) {
   /* 기록하는 동안 미리 적어 둔 금액·메모를 그대로 물려준다(§3) */
   if (r.m && typeof r.m === "object" && Object.keys(r.m).length) log.m = r.m;
   if (r.place) log.place = r.place;
+  if (r.ph) { log.ph = r.ph; log.pht = r.pht || ""; }
   if (r.dateKey === S.dateKey) { day().logs.push(log); saveDay(); }
   else {
     const d = Object.assign(emptyDay(r.dateKey), (await readOnce("days/" + r.dateKey)) || {});
@@ -1089,7 +1118,7 @@ async function pauseRun() {
   const banked = (r.accMs || 0) + (r.startMs ? Date.now() - r.startMs : 0);
   const log = await commitSegment(r);
   /* 금액·메모는 방금 기록된 토막이 가져갔다 — 이어서 할 때 또 붙으면 두 번 세어진다 */
-  const nr = Object.assign({}, r, { paused: true, startMs: 0, accMs: banked, m: null, note: "", place: "" });
+  const nr = Object.assign({}, r, { paused: true, startMs: 0, accMs: banked, m: null, note: "", place: "", ph: "", pht: "" });
   S.running = nr; save("state/running", nr); render();
   if (log) note(dur(log.end - log.start) + " 기록하고 중지했습니다 · " + hhmm(log.start) + "–" + hhmm(log.end));
 }
@@ -1292,6 +1321,8 @@ addEventListener("click", (e) => {
 
 /* ============================== sheets ============================== */
 function closeSheet() { $("#overlay").hidden = true; $("#sheet").innerHTML = ""; }
+$("#photoOv").onclick = () => { $("#photoOv").hidden = true; $("#photoImg").src = ""; };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#photoOv").hidden) $("#photoOv").click(); });
 $("#overlay").addEventListener("pointerdown", (e) => { if (e.target.id === "overlay") closeSheet(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#overlay").hidden) closeSheet(); });
 /* 시트 안 한 줄 입력칸에서 Enter = 저장. 한글 조합 중(isComposing)의 Enter는 글자 확정이라 건드리지 않는다. */
@@ -1353,7 +1384,13 @@ function moneyFieldHTML(o, p) {
     '<div class="chiprow">' +
       '<button class="addchip" type="button" id="' + p + 'Chip"' + (open ? " hidden" : "") + '>＋ 금액</button>' +
       '<button class="addchip" type="button" id="' + p + 'PChip"' + (pOpen ? " hidden" : "") + '>＋ 장소</button>' +
+      '<button class="addchip" type="button" id="' + p + 'FChip"' + (photoIdOf(o) ? " hidden" : "") + '>＋ 사진</button>' +
+      '<input type="file" accept="image/*" id="' + p + 'File" hidden>' +
     "</div>" +
+    '<div id="' + p + 'FBody"' + (photoIdOf(o) ? "" : " hidden") + ' style="margin-top:9px"><label>사진</label>' +
+    '<div class="phwrap"><img class="phthumb" id="' + p + 'Img" alt="붙인 사진" src="' + esc(thumbOf(o)) + '">' +
+    '<div class="phside"><div class="mini" id="' + p + 'FMsg" style="color:var(--muted)">눌러서 크게 봅니다</div>' +
+    '<button class="btn ghost" type="button" id="' + p + 'FX">사진 빼기</button></div></div></div>' +
     '<div id="' + p + 'PBody"' + (pOpen ? "" : " hidden") + ' style="margin-top:9px"><label for="' + p + 'Plc">장소</label><div class="times">' +
     '<input type="text" id="' + p + 'Plc" maxlength="40" placeholder="예: 학교 도서관" value="' + esc(pl) + '">' +
     '<button class="btn ghost" type="button" id="' + p + 'PX" style="flex:0 0 auto">지우기</button></div>' +
@@ -1412,9 +1449,74 @@ function moneyFieldOn(p, o) {
       b.onclick = () => { pIn.value = b.getAttribute("data-plc"); pIn.focus(); };
     });
   }
-  return { money: () => rows, place: () => (pIn ? pIn.value.trim().slice(0, 40) : "") };
+  /* 사진 — 고르면 그 자리에서 줄여 미리보기를 띄우고, 저장할 때 큰 쪽을 photos/<id>에 쓴다.
+     기록당 1장(나중에 확대). 바꾸거나 빼면 예전 문서를 지운다. */
+  const fChip = $("#" + p + "FChip"), fBody = $("#" + p + "FBody"), fInp = $("#" + p + "File"),
+        fImg = $("#" + p + "Img"), fMsg = $("#" + p + "FMsg");
+  let ph = { id: photoIdOf(o), thumb: thumbOf(o), full: "", dirty: false, old: photoIdOf(o) };
+  if (fChip) {
+    fChip.onclick = () => fInp.click();
+    fInp.onchange = async () => {
+      const f = fInp.files && fInp.files[0]; if (!f) return;
+      fChip.hidden = true; fBody.hidden = false; fMsg.textContent = "줄이는 중…";
+      try {
+        const thumb = await shrink(f, PH_THUMB, 0.5), full = await shrink(f, PH_FULL, 0.7);
+        ph = { id: ph.id || ("p" + uid()), thumb: thumb, full: full, dirty: true, old: ph.old };
+        fImg.src = thumb;
+        fMsg.textContent = "저장하면 올라갑니다 · 약 " + Math.round(full.length / 1400) + "KB";
+      } catch (e) {
+        fMsg.textContent = "이 사진은 읽을 수 없습니다.";
+        if (!ph.thumb) { fBody.hidden = true; fChip.hidden = false; }
+      }
+      fInp.value = "";
+    };
+    fImg.onclick = () => { if (ph.full) { $("#photoImg").src = ph.full; $("#photoOv").hidden = false; } else if (ph.id) photoView(ph.id, ph.thumb); };
+    $("#" + p + "FX").onclick = () => { ph = { id: "", thumb: "", full: "", dirty: true, old: ph.old }; fImg.src = ""; fBody.hidden = true; fChip.hidden = false; };
+  }
+  return { money: () => rows, place: () => (pIn ? pIn.value.trim().slice(0, 40) : ""), photo: () => ph };
+}
+/* 저장 시점에 사진 문서를 쓰고, 떨어져 나간 예전 사진은 지운다. 기록에는 id와 미리보기만 남는다. */
+function photoCommit(rec, ph) {
+  if (!ph) return;
+  if (!ph.dirty) { if (ph.id) { rec.ph = ph.id; rec.pht = ph.thumb; } return; }
+  if (ph.old && ph.old !== ph.id) del("photos/" + ph.old);
+  if (ph.id && ph.full) { save("photos/" + ph.id, { id: ph.id, d: ph.full, at: Date.now() }); rec.ph = ph.id; rec.pht = ph.thumb; }
+  else if (ph.id && ph.thumb) { rec.ph = ph.id; rec.pht = ph.thumb; }
 }
 function placeOf(o) { return o && typeof o.place === "string" ? o.place.trim() : ""; }
+
+/* ===== 사진 (로드맵 §3-4) — 무료로 가는 길 =====
+   Storage(요금제 필요) 대신 Firestore를 쓰되 **날짜 문서에는 큰 걸 넣지 않는다**:
+   - 큰 사진 1장 = 문서 하나(`photos/<id>`). 볼 때만 따로 읽는다.
+   - 아주 작은 미리보기(pht)만 기록에 같이 둔다 → 목록·달력이 추가 읽기 없이 바로 그린다.
+   기록에서 사진을 떼면 `photos/<id>`도 지운다(고아 방지). 지금은 기록당 1장. */
+const PH_FULL = 1000, PH_THUMB = 120;
+function photoIdOf(o) { return o && typeof o.ph === "string" && o.ph ? o.ph : ""; }
+function thumbOf(o) { return o && typeof o.pht === "string" && o.pht ? o.pht : ""; }
+/* 캔버스로 줄여 JPEG로 바꾼다 — 원본을 그대로 올리면 용량이 감당이 안 된다. */
+function shrink(file, max, q) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const r = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * r)), h = Math.max(1, Math.round(img.height * r));
+      const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      const cx = cv.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, w, h); cx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      try { res(cv.toDataURL("image/jpeg", q)); } catch (e) { rej(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("image")); };
+    img.src = url;
+  });
+}
+async function photoRead(id) { const d = await readOnce("photos/" + id); return (d && d.d) || ""; }
+/* 큰 사진 보기 — 탭하면 그때 불러온다(목록에서는 미리보기만 쓴다) */
+async function photoView(id, thumb) {
+  const ov = $("#photoOv"), img = $("#photoImg");
+  img.src = thumb || ""; ov.hidden = false;
+  const full = await photoRead(id);
+  if (full && !ov.hidden) img.src = full;
+}
 /* 최근 쓴 장소를 앞으로 당겨 둔다 — 다음 기록에서 칩 한 번으로 끝나게(§7-1 파생) */
 function rememberPlace(v) {
   const s = (v || "").trim(); if (!s) return;
@@ -1474,7 +1576,8 @@ function runSheet() {
   const take = () => {
     const cur = S.running; if (!cur) return null;
     const pl = exR.place(); rememberPlace(pl);
-    const nr = Object.assign({}, cur, { m: moneyFieldRead(exR.money, cur.m), place: pl, note: $("#rNote").value.trim().slice(0, 300) });
+    const pc = {}; photoCommit(pc, exR.photo());
+    const nr = Object.assign({}, cur, { m: moneyFieldRead(exR.money, cur.m), place: pl, ph: pc.ph || "", pht: pc.pht || "", note: $("#rNote").value.trim().slice(0, 300) });
     S.running = nr; save("state/running", nr);
     return nr;
   };
@@ -1527,7 +1630,11 @@ function blockSheet(kind, id, preset) {
     };
   }
   $("#bCancel").onclick = closeSheet;
-  if (o) $("#bDel").onclick = () => { const i = arr.findIndex((x) => x.id === o.id); if (i > -1) arr.splice(i, 1); saveDay(); closeSheet(); render(); };
+  if (o) $("#bDel").onclick = () => {
+    const i = arr.findIndex((x) => x.id === o.id);
+    if (i > -1) { if (photoIdOf(arr[i])) del("photos/" + photoIdOf(arr[i])); arr.splice(i, 1); }
+    saveDay(); closeSheet(); render();
+  };
   $("#bSave").onclick = () => {
     const r = rd(), a = r[0], b = r[1];
     if (!(a != null && b != null && b > a)) return;
@@ -1542,6 +1649,7 @@ function blockSheet(kind, id, preset) {
     if (!isPlan) {
       const mm = moneyFieldRead(exB.money, o && o.m); if (mm) rec.m = mm;
       const pl = exB.place(); if (pl) { rec.place = pl; rememberPlace(pl); }
+      photoCommit(rec, exB.photo());
     }
     else if (o && o.m) rec.m = o.m;
     if (rec.end <= rec.start) rec.end = rec.start + 10;
@@ -1848,6 +1956,7 @@ async function drawStats() {
     const tot30 = sum(m30, (x) => x.krw);
     if (!tot30) return "";
     const mk = todayKey.slice(0, 7);
+    /* 이번 달 지출 합계 — 일평균의 분자. 분모는 오늘 날짜(19일이면 19). */
     const mTot = Object.keys(map).filter((k) => k.slice(0, 7) === mk).reduce((s, k) => s + (map[k].krw || 0), 0);
     const kt = {}; m30.forEach((d) => Object.keys(d.krwCat || {}).forEach((k) => kt[k] = (kt[k] || 0) + d.krwCat[k]));
     const kMax = Math.max(1, ...Object.values(kt));
@@ -1855,7 +1964,8 @@ async function drawStats() {
     const kKeys = Object.keys(kt).sort((a, b) => (a === "" ? 1 : b === "" ? -1 : kt[b] - kt[a]));
     return '<div class="sec-t">지출 · 기록에 적은 금액</div>' +
       '<div class="stat-grid">' +
-        card("오늘", fmtKrw(t.krw) + "원", t.krw ? "기록에 적은 금액" : "아직 없습니다", null, "var(--actual)") +
+        card("일평균", fmtKrw(Math.round(mTot / Math.max(1, +todayKey.slice(8, 10)))) + "원",
+          "이번 달 " + (+todayKey.slice(8, 10)) + "일 기준 · 오늘 " + fmtKrw(t.krw) + "원", null, "var(--actual)") +
         card("최근 7일", fmtKrw(sum(w, (x) => x.krw)) + "원", "하루 평균 " + fmtKrw(Math.round(sum(w, (x) => x.krw) / 7)) + "원", null, "var(--actual)") +
         card("이번 달", fmtKrw(mTot) + "원", mk.replace("-", "년 ") + "월", null, "var(--actual)") +
       "</div>" +
@@ -1943,8 +2053,8 @@ function ovWatch() {
 /* 월간 화면에서 각 주에 목표가 몇 개 있는지 — 읽기 한 번씩, 구독은 하지 않는다. */
 /* 달력 점을 그리려면 그 달의 날짜 기록이 필요하다. 한 번 읽고 들고 있는다. */
 let hbDayCache = null;
+/* 달력이 쓰는 날짜 캐시 — 매일 반복 점뿐 아니라 사진·일일목표도 여기서 나온다(반복이 없어도 읽는다). */
 async function loadHabitDays(force) {
-  if (!(S.hb.items || []).length) return;
   if (!force && hbDayCache && Date.now() - hbDayCache.at < 90000) return;
   const rows = await readColl("days", "date", 400), map = {};
   rows.forEach((r) => { if (r && r.date && (r.habits || (r.tasks && r.tasks.length) || (r.logs && r.logs.length))) map[r.date] = r; });
@@ -2199,9 +2309,16 @@ async function drawOver(force) {
       const dd = parseKey(k), hit = dueM[k] || [], hbs = hbOn(k).slice(0, 4), rec = hbMap[k];
       const tip = k + (hbs.length ? " · " + hbs.map((x) => x.title + " " + hbCount(rec, x.id) + "/" + hbTarget(x)).join(", ") : "") +
         (hit.length ? " · 목표: " + hit.map((g) => g.title).join(", ") : "");
-      cells.push('<button class="cell' + (k === todayKey ? " tdy" : "") + '" data-go="' + k + '" title="' + esc(tip) + '">' +
+      /* 그날 사진 한 장을 칸 배경으로, 일일목표(할일) 달성은 아래 숫자로 — 사용자 요청 2026-10-19 */
+      const th = ((rec && rec.logs) || []).map(thumbOf).filter(Boolean)[0] || "";
+      const tk = (rec && rec.tasks) || [];
+      const tkDone = tk.filter((x) => x && x.done).length;
+      cells.push('<button class="cell' + (k === todayKey ? " tdy" : "") + (th ? " hasph" : "") + '" data-go="' + k + '" title="' +
+        esc(tip + (tk.length ? " · 할일 " + tkDone + "/" + tk.length : "")) + '"' +
+        (th ? ' style="background-image:url(' + esc(th) + ')"' : "") + ">" +
         (hit.length ? '<span class="gdot' + (hit.every((g) => g.done) ? " ok" : "") + '"></span>' : "") +
         '<span class="dn">' + dd.getDate() + "</span>" +
+        (tk.length ? '<span class="tk">' + tkDone + "/" + tk.length + "</span>" : "") +
         (hbs.length ? '<span class="hdots">' + hbs.map((x) =>
           '<i class="' + (hbCount(rec, x.id) >= hbTarget(x) ? "on" : "") + '" style="--c:' + esc(tag(x.tagId).color) + '"></i>').join("") + "</span>" : "") +
         "</button>");
@@ -2222,7 +2339,7 @@ async function drawOver(force) {
       '<div class="card"><div class="card-b"><div class="cal">' +
         ["월", "화", "수", "목", "금", "토", "일"].map((x) => '<div class="dh">' + x + "</div>").join("") +
         cells.join("") +
-      '</div><div class="legend"><span>날짜를 누르면 그 날의 할일·타임라인으로 갑니다</span>' +
+      '</div><div class="legend"><span>날짜를 누르면 그 날의 할일·타임라인으로 갑니다</span><span>칸 배경은 그날 사진 · 아래 숫자는 할일 달성</span>' +
         ((S.hb.items || []).length ? '<span>아래 점은 매일 반복 · 채워지면 그 날 다 한 것</span>' : "") +
         '<span><b class="dotl"></b>목표 날짜</span></div></div></div>';
   }
@@ -2291,12 +2408,14 @@ function drawSettings() {
           : "지금은 이 브라우저에만 저장됩니다.") +
       '<br>날짜별로 한 건씩 저장되므로 과거 날짜는 왼쪽 상단 화살표로 언제든 열어 수정할 수 있습니다.</div>' +
       '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">' +
-        '<button class="btn ghost" id="dExp">백업 내보내기</button>' +
+        '<button class="btn ghost" id="dExp">백업 (사진 없이)</button>' +
+        '<button class="btn ghost" id="dExpP">백업 (사진 포함)</button>' +
         '<button class="btn ghost" id="dImp">백업 불러오기</button>' +
         (FB ? '<button class="btn ghost" id="dOut">로그아웃</button>' : "") +
         '<input type="file" id="dFile" accept="application/json,.json" hidden>' +
       "</div></div></div>";
-  $("#dExp").onclick = exportAll;
+  $("#dExp").onclick = () => exportAll(false);
+  $("#dExpP").onclick = () => exportAll(true);
   $("#dImp").onclick = () => $("#dFile").click();
   $("#dFile").onchange = (e) => { if (e.target.files[0]) importAll(e.target.files[0]); };
   if ($("#dOut")) $("#dOut").onclick = async () => { try { await FB.signOut(); } catch (x) { } location.reload(); };
