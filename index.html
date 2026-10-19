@@ -518,6 +518,15 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 
 <script>
 /* ============================== helpers ============================== */
+/* 버전 규칙 (2026-10-19 확정) — v0.MINOR.PATCH
+     0      : 혼자 쓰는 단계. 다른 사람이 쓰기 시작하면 1.0.0.
+     MINOR +1 : 기능 추가 (메모·장소·사진처럼 없던 게 생길 때)
+     PATCH +1 : 버그 수정·다듬기 (기능이 늘지 않을 때)
+   지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
+   0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
+   BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
+const BUILD = "0.9.1";
+const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
@@ -1393,6 +1402,7 @@ function moneyFieldHTML(o, p) {
     '<button class="btn ghost" type="button" id="' + p + 'FX">사진 빼기</button></div></div></div>' +
     '<div id="' + p + 'PBody"' + (pOpen ? "" : " hidden") + ' style="margin-top:9px"><label for="' + p + 'Plc">장소</label><div class="times">' +
     '<input type="text" id="' + p + 'Plc" maxlength="40" placeholder="예: 학교 도서관" value="' + esc(pl) + '">' +
+    '<button class="btn ghost" type="button" id="' + p + 'PMap" style="flex:0 0 auto" title="네이버지도에서 이 장소를 찾습니다">지도</button>' +
     '<button class="btn ghost" type="button" id="' + p + 'PX" style="flex:0 0 auto">지우기</button></div>' +
     (recent.length ? '<div class="chiprow plcs" id="' + p + 'Recent" style="margin-top:7px">' +
       recent.map((x) => '<button class="addchip sm" type="button" data-plc="' + esc(x) + '">' + esc(x) + "</button>").join("") + "</div>" : "") +
@@ -1448,6 +1458,21 @@ function moneyFieldOn(p, o) {
     if (rc) rc.querySelectorAll("[data-plc]").forEach((b) => {
       b.onclick = () => { pIn.value = b.getAttribute("data-plc"); pIn.focus(); };
     });
+    /* 지도 — 키도 서버도 없이 되는 건 "이름으로 검색해 열기"까지다.
+       링크(naver.me)만 주고 이름·좌표를 알아내려면 서버가 필요하다(브라우저에서 CORS로 막힘). */
+    $("#" + p + "PMap").onclick = () => {
+      const q = pIn.value.trim(); if (!q) { pIn.focus(); return; }
+      window.open("https://map.naver.com/p/search/" + encodeURIComponent(q), "_blank", "noopener");
+    };
+    /* 지도 앱에서 '공유'한 글을 붙이면 보통 "이름 ... https://naver.me/xxxx" 꼴이다.
+       주소는 떼고 이름만 남긴다(주소를 장소 이름으로 쓰면 통계가 지저분해진다). */
+    pIn.onpaste = (e) => {
+      const t = (e.clipboardData || window.clipboardData).getData("text") || "";
+      if (!/https?:\/\//.test(t)) return;
+      e.preventDefault();
+      const name = t.replace(/https?:\/\/\S+/g, " ").replace(/\s+/g, " ").trim();
+      pIn.value = (name || t).slice(0, 40);
+    };
   }
   /* 사진 — 고르면 그 자리에서 줄여 미리보기를 띄우고, 저장할 때 큰 쪽을 photos/<id>에 쓴다.
      기록당 1장(나중에 확대). 바꾸거나 빼면 예전 문서를 지운다. */
@@ -2406,7 +2431,8 @@ function drawSettings() {
     '<div class="card"><div class="card-b"><div style="font-size:12.5px;color:var(--muted);line-height:1.65">' +
       (FB && DB ? "<b>" + esc(S.email) + "</b> 계정의 클라우드에 저장됩니다. 같은 계정으로 로그인한 PC·휴대폰이 같은 기록을 공유하고, 앱이 업데이트돼도 기록은 그대로 남습니다."
           : "지금은 이 브라우저에만 저장됩니다.") +
-      '<br>날짜별로 한 건씩 저장되므로 과거 날짜는 왼쪽 상단 화살표로 언제든 열어 수정할 수 있습니다.</div>' +
+      '<br>날짜별로 한 건씩 저장되므로 과거 날짜는 왼쪽 상단 화살표로 언제든 열어 수정할 수 있습니다.' +
+      '<br><span class="mini" style="color:var(--muted)">버전 <b style="font-family:var(--font-num)">v' + esc(BUILD) + '</b> (' + esc(BUILT) + ') · 이 번호가 최신이면 업데이트가 반영된 것입니다.</span></div>' +
       '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">' +
         '<button class="btn ghost" id="dExp">백업 (사진 없이)</button>' +
         '<button class="btn ghost" id="dExpP">백업 (사진 포함)</button>' +
