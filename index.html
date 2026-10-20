@@ -562,7 +562,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.12.0";
+const BUILD = "0.12.2";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -884,10 +884,39 @@ render();
     drawNoteChip();
   });
   watch("state/running", (d) => { S.running = d && (d.startMs || d.paused) ? d : null; render(); });
+  setTimeout(repairGrpTitles, 2500);
   openDay(S.dateKey);
   setInterval(tick, 1000);
   setInterval(() => { if (S.view === "today") { drawNow(); drawTimeline(); } }, 60000);
 })();
+
+/* 한 번만 도는 복구 — v0.11.0의 "묶음 제안"이 제목 앞의 공통 부분을 떼어 내 저장했다.
+   묶음이 있는데 제목에 그 이름이 없으면 도로 붙인다. 여러 번 돌아도 결과가 같다(이미 붙어 있으면 건너뜀).
+   이 기기에서 한 번 돌면 표시를 남겨 다음부터는 날짜를 통째로 읽지 않는다. */
+async function repairGrpTitles() {
+  if (readOnly || LS.read("fix-grptitle")) return;
+  try {
+    const rows = await readDays(10000);
+    let n = 0;
+    rows.forEach((r) => {
+      if (!r || !r.date || !Array.isArray(r.tasks)) return;
+      /* 열려 있는 날은 **화면이 들고 있는 그 객체**를 고쳐야 한다. 따로 읽은 사본을 고쳐 저장하면
+         다음 저장 때 화면 쪽 옛 제목이 도로 덮어쓴다. */
+      const live = r.date === S.dateKey ? day() : r;
+      if (!Array.isArray(live.tasks)) return;
+      let hit = 0;
+      live.tasks.forEach((t) => {
+        const g = (t && typeof t.grp === "string" ? t.grp.trim() : "");
+        if (!g || !t.title) return;
+        if (t.title.indexOf(g) === 0) return;
+        t.title = (g + " " + t.title).slice(0, 90); hit++;
+      });
+      if (hit) { n += hit; if (live === day()) saveDay(); else save("days/" + r.date, r); }
+    });
+    LS.write("fix-grptitle", 1);
+    if (n) { if (S.view === "today") render(); note("묶음에서 사라졌던 이름 " + n + "개를 제목에 되돌렸습니다."); }
+  } catch (e) { }
+}
 
 function openDay(k) {
   S.dateKey = k;
