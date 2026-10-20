@@ -105,6 +105,14 @@ ul.tasks li.grp .ar{display:inline-block;transition:transform .15s;color:var(--m
 ul.tasks li.grp.open .ar{transform:rotate(90deg)}
 ul.tasks li.grp .g-n{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--muted)}
 ul.tasks li.sub{padding-left:26px}
+.tctl{display:flex;gap:6px;align-items:center;padding:0 13px 9px;flex-wrap:wrap}
+.tctl select{flex:1 1 112px;min-width:0;font-size:12px;padding:6px 8px}
+.tctl .chip-btn[aria-pressed="true"]{border-color:var(--plan);color:var(--plan);background:color-mix(in srgb,var(--plan) 10%,var(--surface))}
+.hidnote{padding:9px 13px;text-align:center;font-size:11.5px;color:var(--muted)}
+.gsug{display:flex;gap:7px;flex-wrap:wrap;padding:0 13px 10px}
+.gsug .sug{display:inline-flex;align-items:center;border:1px dashed var(--plan);border-radius:999px;background:color-mix(in srgb,var(--plan) 8%,var(--surface))}
+.gsug .sugb{border:0;background:transparent;padding:6px 4px 6px 12px;font-size:12px;color:var(--plan);font-weight:500}
+.gsug .sugx{border:0;background:transparent;padding:6px 10px 6px 4px;font-size:11px;color:var(--muted);line-height:1}
 @media (prefers-reduced-motion:reduce){ul.tasks li.grp .ar{transition:none}}
 ul.tasks li:last-child{border-bottom:0}
 .tick{flex:0 0 auto;width:20px;height:20px;margin-top:1px;border:1.5px solid var(--line);border-radius:5px;background:var(--surface);display:grid;place-items:center;padding:0;color:transparent;font-size:12px}
@@ -479,6 +487,18 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
             <select id="newTag"></select>
             <button class="btn" id="addTask">추가</button>
           </div>
+          <div class="tctl" id="taskCtl">
+            <select id="tSort" aria-label="정렬">
+              <option value="add">추가한 순서</option>
+              <option value="undone">남은 것 먼저</option>
+              <option value="plan">계획 시간 순</option>
+              <option value="tag">분류 태그 순</option>
+              <option value="grp">묶음 순</option>
+            </select>
+            <select id="tTag" aria-label="태그 보기"></select>
+            <button class="chip-btn" id="tOnly" aria-pressed="false">남은 것만</button>
+          </div>
+          <div class="gsug" id="grpSug" hidden></div>
           <ul class="tasks" id="taskList"></ul>
         </div>
       </div>
@@ -538,7 +558,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.10.0";
+const BUILD = "0.11.0";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -908,6 +928,96 @@ function drawTagSelect() {
   if (cur && S.set.tags.some((t) => t.id === cur)) sel.value = cur;
 }
 
+/* 이름이 비슷한 할일을 찾아 "묶을까요?"만 띄운다 — 자동으로 묶지는 않는다(사용자가 고른다).
+   규칙: 아직 묶이지 않은 할일 중 **앞부분이 2글자 이상 같은 것이 2개 이상**이면 후보.
+   "마케팅조사론 2강 / 마케팅조사론 3강" 도 "마케팅조사론2강 / 마케팅조사론3강" 도 잡힌다. */
+function lcp(a, b) { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return a.slice(0, i); }
+function trimKey(k) { return k.replace(/[\s\-_.·,:]*\d*[\s\-_.·,:]*$/, "").trim(); }
+const gsugOff = {};
+function groupSuggest(tasks) {
+  const list = tasks.filter((t) => !grpOf(t) && (t.title || "").trim().length > 1)
+    .map((t) => ({ id: t.id, s: t.title.trim() }))
+    .sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
+  const out = [];
+  let cur = null;
+  for (let i = 0; i < list.length; i++) {
+    if (cur) {
+      const k = trimKey(lcp(cur.key, list[i].s));
+      if (k.length >= 2) { cur.key = k; cur.ids.push(list[i].id); continue; }
+      if (cur.ids.length >= 2) out.push(cur);
+      cur = null;
+    }
+    if (i + 1 < list.length) {
+      const k = trimKey(lcp(list[i].s, list[i + 1].s));
+      if (k.length >= 2) { cur = { key: k, ids: [list[i].id] }; }
+    }
+  }
+  if (cur && cur.ids.length >= 2) out.push(cur);
+  return out.filter((c) => !gsugOff[c.key]).slice(0, 3);
+}
+/* 묶을 때 제목 앞의 공통 부분은 떼어 낸다 — 머리글에 이미 있으니 "마케팅조사론 2강"이 두 번 보이지 않게. */
+function applyGroup(key, ids) {
+  const d = day();
+  ids.forEach((id) => {
+    const t = d.tasks.find((x) => x.id === id); if (!t) return;
+    t.grp = key.slice(0, 20);
+    const rest = t.title.trim().slice(key.length).replace(/^[\s\-_.·,:]+/, "").trim();
+    if (rest) t.title = rest;
+  });
+  saveDay(); render();
+  note('"' + key + '" 묶음으로 ' + ids.length + "개를 모았습니다. 묶음은 할일 수정에서 풀 수 있습니다.");
+}
+/* 보기 설정 — 기기마다 다를 수 있고 기록이 아니므로 이 브라우저에만 둔다(동기화하지 않는다). */
+const UI = Object.assign({ sort: "add", only: false, tag: "" }, LS.read("ui") || {});
+function saveUI() { LS.write("ui", UI); }
+function drawTaskCtl() {
+  const se = $("#tSort"), te = $("#tTag"), ob = $("#tOnly");
+  if (!se) return;
+  se.value = UI.sort;
+  te.innerHTML = '<option value="">태그 전체</option>' + S.set.tags.map((g) =>
+    '<option value="' + esc(g.id) + '"' + (g.id === UI.tag ? " selected" : "") + ">" + esc(g.name) + "</option>").join("");
+  ob.setAttribute("aria-pressed", !!UI.only);
+  se.onchange = () => { UI.sort = se.value; saveUI(); drawTasks(); };
+  te.onchange = () => { UI.tag = te.value; saveUI(); drawTasks(); };
+  ob.onclick = () => { UI.only = !UI.only; saveUI(); drawTasks(); };
+}
+/* 보기(정렬·필터)는 화면에만 적용한다 — 저장된 순서나 done 값은 건드리지 않는다. */
+function viewTasks(all) {
+  let v = all.slice();
+  if (UI.only) v = v.filter((t) => !t.done);
+  if (UI.tag) v = v.filter((t) => (t.tagId || "") === UI.tag);
+  const idx = new Map(all.map((t, i) => [t.id, i]));
+  const keep = (a, b) => idx.get(a.id) - idx.get(b.id);
+  const d = day();
+  const firstPlan = (t) => {
+    const ps = d.plans.filter((x) => x.taskId === t.id);
+    return ps.length ? Math.min.apply(null, ps.map((x) => x.start)) : 1e9;
+  };
+  if (UI.sort === "undone") v.sort((a, b) => (a.done - b.done) || keep(a, b));
+  else if (UI.sort === "plan") v.sort((a, b) => (firstPlan(a) - firstPlan(b)) || keep(a, b));
+  else if (UI.sort === "tag") {
+    const ord = {}; S.set.tags.forEach((g, i) => ord[g.id] = i);
+    v.sort((a, b) => ((ord[a.tagId] == null ? 99 : ord[a.tagId]) - (ord[b.tagId] == null ? 99 : ord[b.tagId])) || keep(a, b));
+  } else if (UI.sort === "grp") {
+    v.sort((a, b) => { const x = grpOf(a), y = grpOf(b); return (x === y ? 0 : !x ? 1 : !y ? -1 : (x < y ? -1 : 1)) || keep(a, b); });
+  }
+  return v;
+}
+function drawSug() {
+  const box = $("#grpSug"); if (!box) return;
+  const cs = readOnly ? [] : groupSuggest(day().tasks);
+  box.hidden = !cs.length;
+  box.innerHTML = cs.map((c, i) =>
+    '<span class="sug" data-i="' + i + '"><button class="sugb" data-act="do">＋ &quot;' + esc(c.key) + '&quot; ' + c.ids.length + "개 묶기</button>" +
+    '<button class="sugx" data-act="no" title="이 제안 숨기기">✕</button></span>').join("");
+  box.querySelectorAll("[data-act]").forEach((b) => {
+    b.onclick = () => {
+      const c = cs[+b.closest(".sug").dataset.i]; if (!c) return;
+      if (b.dataset.act === "no") { gsugOff[c.key] = 1; drawSug(); } else applyGroup(c.key, c.ids);
+    };
+  });
+}
+
 function drawTasks() {
   const d = day(), ul = $("#taskList");
   const done = d.tasks.filter((t) => t.done).length;
@@ -915,13 +1025,18 @@ function drawTasks() {
   $("#addTask").disabled = readOnly; $("#newTask").disabled = readOnly; $("#carryBtn").hidden = readOnly;
 
   if (!d.tasks.length) {
+    $("#taskCtl").hidden = true;
     ul.innerHTML = '<li style="display:block"><div class="empty"><b>오늘 할 일을 적어보세요</b>' +
       "태그를 붙여 추가하면 아래 격자에 계획을 올릴 수 있어요." +
       (readOnly ? "" : '<div class="quick"><button class="chip-btn" data-q="carry">어제 미완료 가져오기</button><button class="chip-btn" data-q="sample">샘플로 둘러보기</button></div>') +
       "</div></li>";
     ul.querySelectorAll("[data-q]").forEach((b) => b.onclick = () => b.dataset.q === "carry" ? carryOver() : fillSample());
+    drawSug();
     return;
   }
+  $("#taskCtl").hidden = false;
+  drawTaskCtl();
+  const view = viewTasks(d.tasks);
   const row = (t) => {
     const g = tag(t.tagId);
     const p = d.plans.filter((x) => x.taskId === t.id).reduce((s, x) => s + (x.end - x.start), 0);
@@ -941,7 +1056,7 @@ function drawTasks() {
   /* 그룹 — 한 과목의 2강·3강처럼 같이 묶이는 것들. 머리글은 할일이 아니라 라벨이라
      달성률 계산(dayStats)에는 아무 영향이 없다. 묶음이 하나뿐이면 굳이 접지 않는다. */
   const blocks = [];                       /* [{grp, items}] — 먼저 나온 순서를 지킨다 */
-  d.tasks.forEach((t) => {
+  view.forEach((t) => {
     const k = grpOf(t);
     const last = blocks.length ? blocks[blocks.length - 1] : null;
     if (k && last && last.grp === k) { last.items.push(t); return; }
@@ -957,6 +1072,10 @@ function drawTasks() {
       '<span class="g-n">' + dn + " / " + b.items.length + "</span></li>" +
       (open ? b.items.map(row).join("") : "");
   }).join("");
+  const hid = d.tasks.length - view.length;
+  if (hid > 0) ul.innerHTML += '<li style="display:block"><div class="hidnote">' + hid + "개가 보기 설정에 가려져 있습니다</div></li>";
+  if (!view.length) ul.innerHTML = '<li style="display:block"><div class="empty"><b>보여 줄 할일이 없습니다</b>보기 설정을 바꾸면 가려진 ' + hid + "개가 나옵니다.</div></li>";
+  drawSug();
 }
 /* 접힘 상태는 이 세션에만 둔다(저장할 가치가 없고, 저장하면 기기마다 어긋난다).
    다 끝낸 묶음은 알아서 접힌다 — 손으로 연 적이 있으면 그 뜻을 따른다. */
