@@ -562,7 +562,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.12.2";
+const BUILD = "0.13.0";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -2396,8 +2396,8 @@ function addGoal(which, title, due) {
 function saveNt() { save("settings/notes", { items: S.nt.items }); }
 function ntFind(id) { return (S.nt.items || []).find((x) => x && x.id === id); }
 /* 메모 목록 조작 — 길게 누르면 ☐ 할 것 ↔ ✎ 메모. done 키 자체를 넣고 빼서 구분한다. */
-function bindNotes(host) {
-  const redraw = () => { saveNt(); drawOver(); drawNoteChip(); };
+function bindNotes(host, inSheet) {
+  const redraw = () => { saveNt(); if (S.view === "over") drawOver(); drawNoteChip(); if (inSheet) noteListSheet(); };
   host.querySelectorAll(".n-chk").forEach((b) => {
     const id = b.getAttribute("data-id");
     let hold = null, held = false;
@@ -2416,7 +2416,7 @@ function bindNotes(host) {
     };
   });
   host.querySelectorAll(".n-text").forEach((el) => {
-    el.onclick = () => noteSheet(el.getAttribute("data-id"));
+    el.onclick = () => noteSheet(el.getAttribute("data-id"), inSheet);
   });
   host.querySelectorAll(".n-del").forEach((b) => {
     b.onclick = () => { const i = (S.nt.items || []).findIndex((x) => x.id === b.getAttribute("data-id")); if (i > -1) S.nt.items.splice(i, 1); redraw(); };
@@ -2426,7 +2426,7 @@ function bindNotes(host) {
     const t = el.value.trim(); if (!t) return;
     S.nt.items.unshift({ id: uid(), text: t.slice(0, 200), done: false, at: keyOf(new Date()) });
     el.value = ""; redraw();
-    const n = $("#viewOver .n-new"); if (n) n.focus();
+    const n = (inSheet ? $("#sheet .n-new") : $("#viewOver .n-new")); if (n) n.focus();
   };
   const nb = host.querySelector(".n-add"); if (nb) nb.onclick = add;
   const ni = host.querySelector(".n-new");
@@ -2436,7 +2436,32 @@ function bindNotes(host) {
 }
 /* 한 줄 입력칸에 긴 글을 적기 불편하다는 지적(2026-10-20) → 누르면 작은 창이 열린다.
    줄바꿈이 되는 넓은 칸 + 종류 바꾸기 + 삭제를 한 자리에 모았다. */
-function noteSheet(id) {
+/* 오늘 탭에서 바로 열리는 메모 창 — 목표 탭까지 내려가지 않게(사용자 지적 2026-10-20).
+   목표 탭 맨 아래 구역도 그대로 둔다(거기서 넓게 보고 싶을 수 있다). */
+function noteListSheet() {
+  const its = S.nt.items || [];
+  const live = its.filter((x) => !x.done), done = its.filter((x) => x.done);
+  const row = (x) => {
+    const memo = x.done === undefined || x.done === null;
+    return '<li class="' + (x.done ? "done" : "") + '">' +
+      '<button class="g-chk n-chk' + (memo ? " memo" : "") + '" data-id="' + esc(x.id) + '" aria-pressed="' + (!!x.done) + '">' +
+      (memo ? "✎" : (x.done ? "✓" : "")) + "</button>" +
+      '<button class="n-text" data-id="' + esc(x.id) + '">' + esc(x.text || "(빈 메모)") + "</button>" +
+      '<button class="iconbtn n-del" data-id="' + esc(x.id) + '" title="삭제">✕</button></li>';
+  };
+  openSheet('<h3>메모' + (live.length ? ' <span class="g-count">' + live.length + "개 남음</span>" : "") + "</h3>" +
+    '<div class="g-add-row n-row" style="margin-top:0;padding-top:0;border-top:0">' +
+      '<input class="g-new n-new" type="text" maxlength="200" placeholder="적어 두기 (예: 장학금 신청 확인)">' +
+      '<button class="btn n-add">추가</button></div>' +
+    (its.length ? '<ul class="goals notes" style="margin-top:12px">' + live.map(row).join("") + done.map(row).join("") + "</ul>"
+      : '<div class="empty" style="padding:18px 4px"><b>비어 있습니다</b>확인할 것·살 것처럼 시간으로 적기 애매한 걸 두세요.</div>') +
+    '<div class="legend" style="margin-top:10px"><span>줄을 누르면 넓게 고칠 수 있습니다 · 아이콘을 길게 누르면 ☐ ↔ ✎</span></div>' +
+    '<div class="sheet-foot"><button class="btn ghost" id="nlClose">닫기</button></div>');
+  bindNotes($("#sheet"), true);
+  $("#nlClose").onclick = closeSheet;
+  const i = $("#sheet .n-new"); if (i) i.focus();
+}
+function noteSheet(id, back) {
   const x = ntFind(id); if (!x) return;
   const memo = x.done === undefined || x.done === null;
   openSheet('<h3>메모</h3>' +
@@ -2452,11 +2477,12 @@ function noteSheet(id) {
   const paint = () => { $("#nKindT").setAttribute("aria-pressed", kind === "t"); $("#nKindM").setAttribute("aria-pressed", kind === "m"); };
   $("#nKindT").onclick = () => { kind = "t"; paint(); };
   $("#nKindM").onclick = () => { kind = "m"; paint(); };
-  $("#nCancel").onclick = closeSheet;
+  const after = () => { if (back) noteListSheet(); else closeSheet(); };
+  $("#nCancel").onclick = after;
   $("#nDel").onclick = () => {
     const i = (S.nt.items || []).findIndex((y) => y.id === id);
     if (i > -1) S.nt.items.splice(i, 1);
-    saveNt(); closeSheet(); drawOver(); drawNoteChip();
+    saveNt(); if (S.view === "over") drawOver(); drawNoteChip(); after();
   };
   $("#nSave").onclick = () => {
     const y = ntFind(id); if (!y) { closeSheet(); return; }
@@ -2466,7 +2492,7 @@ function noteSheet(id) {
       const dd = $("#nDone") ? $("#nDone").checked : !!y.done;
       y.done = dd; y.doneAt = dd ? keyOf(new Date()) : null;
     }
-    saveNt(); closeSheet(); drawOver(); drawNoteChip();
+    saveNt(); if (S.view === "over") drawOver(); drawNoteChip(); after();
   };
 }
 function swapKind(id) {
@@ -2898,7 +2924,7 @@ $("#tabToday").onclick = () => {
 };
 $("#tabStats").onclick = () => { S.view = "stats"; render(); drawStats(); };
 $("#tabOver").onclick = () => { S.view = "over"; S.ov.anchor = keyOf(new Date()); render(); drawOver(); loadWeekSummary(); loadHabitDays(true); };
-$("#noteChip").onclick = () => { S.ov.jump = true; $("#tabOver").click(); };
+$("#noteChip").onclick = () => noteListSheet();
 $("#tabSet").onclick = () => { S.view = "set"; render(); };
 $("#prevDay").onclick = () => openDay(shiftKey(S.dateKey, -1));
 $("#nextDay").onclick = () => openDay(shiftKey(S.dateKey, 1));
