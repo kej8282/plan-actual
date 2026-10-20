@@ -98,6 +98,14 @@ input[type=time]{font-family:var(--font-num)}
 
 ul.tasks{list-style:none;margin:0;padding:0}
 ul.tasks li{display:flex;gap:9px;align-items:flex-start;padding:9px 13px;border-bottom:1px solid var(--line-soft)}
+/* 묶음 머리글 — 할일이 아니라 라벨이다(통계에 안 들어간다) */
+ul.tasks li.grp{align-items:center;gap:6px;padding:8px 13px;background:var(--surface-2)}
+ul.tasks li.grp .g-tog{flex:1;min-width:0;display:flex;align-items:center;gap:6px;border:0;background:transparent;padding:0;font-size:13px;font-weight:600;color:var(--ink);text-align:left}
+ul.tasks li.grp .ar{display:inline-block;transition:transform .15s;color:var(--muted);font-size:11px}
+ul.tasks li.grp.open .ar{transform:rotate(90deg)}
+ul.tasks li.grp .g-n{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--muted)}
+ul.tasks li.sub{padding-left:26px}
+@media (prefers-reduced-motion:reduce){ul.tasks li.grp .ar{transition:none}}
 ul.tasks li:last-child{border-bottom:0}
 .tick{flex:0 0 auto;width:20px;height:20px;margin-top:1px;border:1.5px solid var(--line);border-radius:5px;background:var(--surface);display:grid;place-items:center;padding:0;color:transparent;font-size:12px}
 .tick[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
@@ -300,6 +308,11 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 /* 메모 목록 — 목표 목록과 같은 줄 모양을 쓰되 날짜 칸이 없다 */
 .goals.notes li{grid-template-columns:24px 1fr 28px}
 .goals .n-chk.memo{color:var(--muted);border-style:dashed;background:transparent;font-size:11px}
+.goals .n-text{min-width:0;width:100%;border:1px solid transparent;background:transparent;border-radius:var(--radius);padding:7px 6px;font-size:14px;color:var(--ink);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.goals .n-text:hover{border-color:var(--line-soft);background:var(--surface-2)}
+.seg2{display:flex;gap:7px}
+.seg2 .btn{flex:1}
+.seg2 .btn[aria-pressed="true"]{border-color:var(--plan);color:var(--plan);background:color-mix(in srgb,var(--plan) 10%,var(--surface))}
 .goals li.done .n-text{color:var(--muted);text-decoration:line-through}
 #noteChip.has{border-color:var(--plan);color:var(--plan)}
 /* 메모 추가줄엔 날짜 칸이 없으니 한 줄로 둔다(목표 추가줄은 폰에서 두 줄로 접힌다) */
@@ -462,7 +475,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
             <button class="chip-btn" id="carryBtn" title="어제 못 끝낸 할일 가져오기">어제 미완료</button>
           </div>
           <div class="addrow">
-            <input type="text" id="newTask" placeholder="해야할 일 추가" maxlength="90">
+            <input type="text" id="newTask" placeholder="해야할 일 추가 (과목: 2~7강)" maxlength="120">
             <select id="newTag"></select>
             <button class="btn" id="addTask">추가</button>
           </div>
@@ -525,7 +538,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.9.2";
+const BUILD = "0.10.0";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -909,13 +922,13 @@ function drawTasks() {
     ul.querySelectorAll("[data-q]").forEach((b) => b.onclick = () => b.dataset.q === "carry" ? carryOver() : fillSample());
     return;
   }
-  ul.innerHTML = d.tasks.map((t) => {
+  const row = (t) => {
     const g = tag(t.tagId);
     const p = d.plans.filter((x) => x.taskId === t.id).reduce((s, x) => s + (x.end - x.start), 0);
     const a = d.logs.filter((x) => x.taskId === t.id).reduce((s, x) => s + (x.end - x.start), 0);
     const run = S.running && S.running.taskId === t.id;
     const on = run && !S.running.paused;
-    return '<li class="' + (t.done ? "done" : "") + '" data-id="' + t.id + '">' +
+    return '<li class="' + (t.done ? "done" : "") + (grpOf(t) ? " sub" : "") + '" data-id="' + t.id + '">' +
       '<button class="tick" data-act="tick" aria-pressed="' + (!!t.done) + '" aria-label="완료 표시">✓</button>' +
       '<div class="t-main"><button class="t-title" data-act="edit">' + esc(t.title) + "</button>" +
       '<div class="t-meta"><span class="tag" style="--c:' + esc(g.color) + '">' + esc(g.name) + "</span>" +
@@ -924,8 +937,33 @@ function drawTasks() {
       "</div></div>" +
       (readOnly ? "" : '<button class="go" data-act="run" data-on="' + (on ? 1 : 0) + '" data-paused="' + (run && !on ? 1 : 0) + '" title="' + (on ? "종료" : run ? "이어서" : "지금 시작") + '">' + (on ? "■" : "▶") + "</button>") +
       "</li>";
+  };
+  /* 그룹 — 한 과목의 2강·3강처럼 같이 묶이는 것들. 머리글은 할일이 아니라 라벨이라
+     달성률 계산(dayStats)에는 아무 영향이 없다. 묶음이 하나뿐이면 굳이 접지 않는다. */
+  const blocks = [];                       /* [{grp, items}] — 먼저 나온 순서를 지킨다 */
+  d.tasks.forEach((t) => {
+    const k = grpOf(t);
+    const last = blocks.length ? blocks[blocks.length - 1] : null;
+    if (k && last && last.grp === k) { last.items.push(t); return; }
+    const same = k ? blocks.find((b) => b.grp === k) : null;
+    if (same) same.items.push(t); else blocks.push({ grp: k, items: [t] });
+  });
+  ul.innerHTML = blocks.map((b) => {
+    if (!b.grp) return b.items.map(row).join("");
+    const dn = b.items.filter((t) => t.done).length, all = dn === b.items.length;
+    const open = grpOpen(b.grp, all);
+    return '<li class="grp' + (open ? " open" : "") + '" data-grp="' + esc(b.grp) + '">' +
+      '<button class="g-tog" data-act="grp" aria-expanded="' + open + '"><span class="ar">▸</span>' + esc(b.grp) + "</button>" +
+      '<span class="g-n">' + dn + " / " + b.items.length + "</span></li>" +
+      (open ? b.items.map(row).join("") : "");
   }).join("");
 }
+/* 접힘 상태는 이 세션에만 둔다(저장할 가치가 없고, 저장하면 기기마다 어긋난다).
+   다 끝낸 묶음은 알아서 접힌다 — 손으로 연 적이 있으면 그 뜻을 따른다. */
+const grpState = {};
+function grpOf(t) { return t && typeof t.grp === "string" ? t.grp.trim() : ""; }
+function grpOpen(k, allDone) { return k in grpState ? grpState[k] : !allDone; }
+function grpToggle(k, allDone) { grpState[k] = !grpOpen(k, allDone); }
 
 function drawTimeline() {
   const d = day(), st = S.set.dayStart;
@@ -1017,13 +1055,44 @@ function tick() {
 /* ============================== task actions ============================== */
 $("#addTask").onclick = addTask;
 $("#newTask").onkeydown = (e) => { if (e.key === "Enter") addTask(); };
+/* 입력 한 줄로 묶음까지 만든다:
+     "마케팅조사론: 3강"    → 그룹 마케팅조사론 / 할일 3강
+     "마케팅조사론: 2~7강"  → 2강·3강…7강 여섯 개를 한 번에 (최대 20개)
+   콜론이 없으면 지금까지와 똑같이 그냥 할일 하나다. */
+function parseAdd(raw) {
+  const s = raw.trim();
+  const m = s.match(/^(.{1,20}?)\s*[:：]\s*(.+)$/);
+  const grp = m ? m[1].trim() : "", body = m ? m[2].trim() : s;
+  const r = body.match(/^(\d{1,3})\s*[~\-–]\s*(\d{1,3})(.*)$/);
+  if (r) {
+    const a = +r[1], b = +r[2], tail = (r[3] || "").trim();
+    if (b >= a && b - a < 20) {
+      const out = [];
+      for (let n = a; n <= b; n++) out.push(n + tail);
+      return { grp: grp, titles: out };
+    }
+  }
+  return { grp: grp, titles: [body] };
+}
 function addTask() {
-  const i = $("#newTask"), t = i.value.trim(); if (!t) return;
-  day().tasks.push({ id: uid(), title: t, tagId: $("#newTag").value || S.set.tags[0].id, done: false });
+  const i = $("#newTask"), raw = i.value.trim(); if (!raw) return;
+  const p = parseAdd(raw), tg = $("#newTag").value || S.set.tags[0].id;
+  p.titles.forEach((ti) => {
+    const t = { id: uid(), title: ti.slice(0, 90), tagId: tg, done: false };
+    if (p.grp) t.grp = p.grp.slice(0, 20);
+    day().tasks.push(t);
+  });
   i.value = ""; saveDay(); render(); i.focus();
+  if (p.titles.length > 1) note(p.titles.length + "개를 \"" + p.grp + "\" 묶음으로 추가했습니다.");
 }
 $("#taskList").onclick = (e) => {
   const btn = e.target.closest("[data-act]"); if (!btn) return;
+  if (btn.dataset.act === "grp") {
+    const li = btn.closest("li"), k = li.dataset.grp;
+    const items = day().tasks.filter((x) => grpOf(x) === k);
+    grpToggle(k, items.length > 0 && items.every((x) => x.done));
+    drawTasks(); return;
+  }
   const id = btn.closest("li").dataset.id, t = task(id); if (!t) return;
   const act = btn.dataset.act;
   if (act === "tick") { t.done = !t.done; saveDay(); render(); }
@@ -1572,12 +1641,16 @@ function moneyFieldRead(get, prev) {
 function taskSheet(t) {
   openSheet('<h3>할일 수정</h3>' +
     '<div class="fld"><label for="eTitle">내용</label><input type="text" id="eTitle" maxlength="90" value="' + esc(t.title) + '"></div>' +
+    '<div class="fld"><label for="eGrp">묶음 (같은 이름끼리 접힙니다)</label><input type="text" id="eGrp" maxlength="20" placeholder="예: 마케팅조사론" value="' + esc(grpOf(t)) + '"></div>' +
     '<div class="fld"><label for="eTag">분류 태그</label><select id="eTag">' + tagOptions(t.tagId) + "</select></div>" +
     '<div class="sheet-foot"><button class="btn danger del" id="eDel">삭제</button><button class="btn ghost" id="eCancel">취소</button><button class="btn go-save" id="eSave">저장</button></div>');
   $("#eCancel").onclick = closeSheet;
   $("#eSave").onclick = () => {
     const v = $("#eTitle").value.trim(); if (!v) return;
-    t.title = v; t.tagId = $("#eTag").value; saveDay(); closeSheet(); render();
+    t.title = v; t.tagId = $("#eTag").value;
+    const gv = $("#eGrp").value.trim().slice(0, 20);
+    if (gv) t.grp = gv; else delete t.grp;
+    saveDay(); closeSheet(); render();
   };
   $("#eDel").onclick = () => {
     const d = day();
@@ -2141,7 +2214,7 @@ function bindNotes(host) {
     };
   });
   host.querySelectorAll(".n-text").forEach((el) => {
-    el.onchange = () => { const x = ntFind(el.getAttribute("data-id")); if (!x) return; x.text = el.value.trim().slice(0, 200); saveNt(); drawNoteChip(); };
+    el.onclick = () => noteSheet(el.getAttribute("data-id"));
   });
   host.querySelectorAll(".n-del").forEach((b) => {
     b.onclick = () => { const i = (S.nt.items || []).findIndex((x) => x.id === b.getAttribute("data-id")); if (i > -1) S.nt.items.splice(i, 1); redraw(); };
@@ -2158,6 +2231,41 @@ function bindNotes(host) {
   if (ni) ni.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); add(); } };
   const cl = host.querySelector(".n-clear");
   if (cl) cl.onclick = () => { S.nt.items = (S.nt.items || []).filter((x) => !x.done); redraw(); };
+}
+/* 한 줄 입력칸에 긴 글을 적기 불편하다는 지적(2026-10-20) → 누르면 작은 창이 열린다.
+   줄바꿈이 되는 넓은 칸 + 종류 바꾸기 + 삭제를 한 자리에 모았다. */
+function noteSheet(id) {
+  const x = ntFind(id); if (!x) return;
+  const memo = x.done === undefined || x.done === null;
+  openSheet('<h3>메모</h3>' +
+    '<div class="fld"><textarea id="nText" rows="5" maxlength="1000" placeholder="적어 둘 것">' + esc(x.text || "") + "</textarea></div>" +
+    '<div class="fld"><label>종류</label><div class="seg2">' +
+      '<button class="btn ghost" type="button" id="nKindT" aria-pressed="' + (!memo) + '">☐ 할 것</button>' +
+      '<button class="btn ghost" type="button" id="nKindM" aria-pressed="' + memo + '">✎ 메모</button>' +
+    "</div>" + (memo ? "" : '<label class="hb-autolab" style="margin-top:9px;display:flex;align-items:center;gap:7px;font-size:13px">' +
+      '<input type="checkbox" id="nDone"' + (x.done ? " checked" : "") + "> 다 했음</label>") + "</div>" +
+    '<div class="sheet-foot"><button class="btn danger del" id="nDel">삭제</button>' +
+    '<button class="btn ghost" id="nCancel">취소</button><button class="btn go-save" id="nSave">저장</button></div>');
+  let kind = memo ? "m" : "t";
+  const paint = () => { $("#nKindT").setAttribute("aria-pressed", kind === "t"); $("#nKindM").setAttribute("aria-pressed", kind === "m"); };
+  $("#nKindT").onclick = () => { kind = "t"; paint(); };
+  $("#nKindM").onclick = () => { kind = "m"; paint(); };
+  $("#nCancel").onclick = closeSheet;
+  $("#nDel").onclick = () => {
+    const i = (S.nt.items || []).findIndex((y) => y.id === id);
+    if (i > -1) S.nt.items.splice(i, 1);
+    saveNt(); closeSheet(); drawOver(); drawNoteChip();
+  };
+  $("#nSave").onclick = () => {
+    const y = ntFind(id); if (!y) { closeSheet(); return; }
+    y.text = $("#nText").value.trim().slice(0, 1000);
+    if (kind === "m") { delete y.done; delete y.doneAt; }
+    else {
+      const dd = $("#nDone") ? $("#nDone").checked : !!y.done;
+      y.done = dd; y.doneAt = dd ? keyOf(new Date()) : null;
+    }
+    saveNt(); closeSheet(); drawOver(); drawNoteChip();
+  };
 }
 function swapKind(id) {
   const x = ntFind(id); if (!x || readOnly) return;
@@ -2282,7 +2390,7 @@ async function drawOver(force) {
         '<button class="g-chk n-chk' + (memo ? " memo" : "") + '" data-id="' + esc(x.id) + '" aria-pressed="' + (!!x.done) + '" ' +
         'title="' + (memo ? "메모입니다 · 길게 누르면 체크하는 할 것으로 바뀝니다" : "완료 표시 · 길게 누르면 체크 없는 메모로 바뀝니다") + '">' +
         (memo ? "✎" : (x.done ? "✓" : "")) + "</button>" +
-        '<input class="g-title n-text" data-id="' + esc(x.id) + '" type="text" maxlength="200" value="' + esc(x.text || "") + '">' +
+        '<button class="n-text" data-id="' + esc(x.id) + '">' + esc(x.text || "(빈 메모)") + "</button>" +
         '<button class="iconbtn n-del" data-id="' + esc(x.id) + '" title="삭제">✕</button></li>';
     };
     return '<div class="sec-t" id="noteTop">메모</div>' +
