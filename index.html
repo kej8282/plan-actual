@@ -975,6 +975,7 @@ function lcp(a, b) { let i = 0; while (i < a.length && i < b.length && a[i] === 
 function trimKey(k) { return k.replace(/[\s\-_.·,:]*\d*[\s\-_.·,:]*$/, "").trim(); }
 const gsugOff = {};
 function normT(x) { return (x || "").replace(/\s+/g, ""); }
+function sugKey(c) { return (c.into ? "+" : "") + c.key + "|" + c.ids.slice().sort().join(","); }
 function groupSuggest(tasks) {
   const list = tasks.filter((t) => !grpOf(t) && (t.title || "").trim().length > 1)
     .map((t) => ({ id: t.id, s: t.title.trim() }))
@@ -1028,7 +1029,9 @@ function groupSuggest(tasks) {
     }
   }
   if (cur && cur.ids.length >= 2) out.push(cur);
-  return out.filter((c) => !gsugOff[c.key + (c.into ? "+" : "")]).slice(0, 3);
+  /* ✕로 숨기는 건 **그 제안 하나**다. 묶음 이름으로 숨기면 나중에 새 할일이 들어와도 영영 안 뜬다
+     (사용자 신고 2026-10-21: "마케팅조사론 4를 더해도 안 뜬다"). 대상이 달라지면 다시 묻는다. */
+  return out.filter((c) => !gsugOff[sugKey(c)]).slice(0, 3);
 }
 /* 묶어도 **제목은 그대로 둔다.** 한때 공통 부분을 떼어 냈는데, 그러면 타임라인 블록이
    "2강"만 남아 계획을 올릴 때 뭐가 뭔지 모르게 된다(사용자 지적 2026-10-20). */
@@ -1088,7 +1091,7 @@ function drawSug() {
   box.querySelectorAll("[data-act]").forEach((b) => {
     b.onclick = () => {
       const c = cs[+b.closest(".sug").dataset.i]; if (!c) return;
-      if (b.dataset.act === "no") { gsugOff[c.key + (c.into ? "+" : "")] = 1; drawSug(); } else applyGroup(c.key, c.ids);
+      if (b.dataset.act === "no") { gsugOff[sugKey(c)] = 1; drawSug(); } else applyGroup(c.key, c.ids);
     };
   });
 }
