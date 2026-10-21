@@ -3,7 +3,7 @@
    offline you get the last one that loaded. Records live in the browser's own
    storage and are never touched by this cache. */
 /* 버전 = v0.MINOR.PATCH (규칙은 index.html 의 BUILD 주석 참고). index.html 의 BUILD 와 항상 같게 유지할 것. */
-const CACHE = "plan-actual-v0.14.1";
+const CACHE = "plan-actual-v0.16.1";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./fb.js", "./icon-192.png", "./icon-512.png", "./icon-512-maskable.png", "./icon-180.png"];
 
 self.addEventListener("install", (e) => {

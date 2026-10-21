@@ -258,7 +258,6 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
   .pane-tabs .pt[aria-selected="true"]{background:var(--surface)}
   .pane-tabs .pt[data-i="0"][aria-selected="true"]{color:var(--plan);border-color:var(--plan)}
   .pane-tabs .pt[data-i="1"][aria-selected="true"]{color:var(--actual);border-color:var(--actual)}
-  .pane-tabs .js-manual{flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:999px;font-size:11px;padding:5px 10px;color:var(--muted);white-space:nowrap}
   .tl-body{grid-template-columns:46px 1fr}
   /* clip, not hidden: `clip` is no scroll container, so a vertical drag still scrolls the timeline */
   .panes{display:flex;grid-column:2;gap:8px;overflow:hidden;overflow:clip}
@@ -319,7 +318,12 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .goals.ro li{grid-template-columns:16px 1fr auto}
 /* 메모 목록 — 목표 목록과 같은 줄 모양을 쓰되 날짜 칸이 없다 */
 .goals.notes li{grid-template-columns:24px 1fr 28px}
-.goals .n-chk.memo{color:var(--muted);border-style:dashed;background:transparent;font-size:11px}
+.goals.notes li{grid-template-columns:18px 24px 1fr 28px}
+.nhandle{cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;color:var(--line);font-size:14px;line-height:1;text-align:center}
+.nhandle:hover{color:var(--muted)}
+.goals.notes li.dragging{opacity:.6;background:var(--surface-2)}
+.goals.notes li.top .n-text{font-weight:600}
+.goals.notes .rk{font-style:normal;font-family:var(--font-num);font-size:10.5px;color:var(--plan);margin-right:6px;font-weight:700}
 .goals .n-text{min-width:0;width:100%;border:1px solid transparent;background:transparent;border-radius:var(--radius);padding:7px 6px;font-size:14px;color:var(--ink);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .goals .n-text:hover{border-color:var(--line-soft);background:var(--surface-2)}
 .seg2{display:flex;gap:7px}
@@ -426,6 +430,10 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .sheet-foot .btn{flex:1}
 .sheet-foot .del{flex:0 0 auto;padding-left:13px;padding-right:13px}
 .sheet-foot .go-save{flex:1.5}
+.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(6px);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:60;max-width:min(520px,calc(100% - 26px));background:color-mix(in srgb,var(--ink) 92%,transparent);color:var(--surface);border-radius:11px;padding:10px 14px;font-size:12.5px;line-height:1.5;box-shadow:0 10px 26px rgba(0,0,0,.28);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;cursor:pointer}
+.toast.up{bottom:calc(92px + env(safe-area-inset-bottom,0px))}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
 .notice{background:color-mix(in srgb,var(--warn) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--warn) 38%,transparent);border-radius:9px;padding:9px 11px;font-size:12.5px;margin-bottom:12px}
 .quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;justify-content:center}
 .login{position:fixed;inset:0;z-index:100;background:var(--bg);display:grid;place-items:center;padding:20px}
@@ -461,7 +469,6 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 </header>
 
 <main>
-  <div id="syncNote" class="notice" hidden></div>
 
   <section id="viewToday">
     <div class="daybar">
@@ -471,7 +478,6 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
       <div class="dow" id="dowLabel"></div>
       <div class="spacer"></div>
       <button class="chip-btn" id="noteChip" title="시간으로 적기 애매한 것 — 목표 탭의 메모로 갑니다">메모</button>
-      <button class="chip-btn" id="fillBtn" hidden title="지나간 계획을 실제 기록으로 한 번에 옮깁니다">계획대로 채우기</button>
       <button class="chip-btn" id="goToday">오늘</button>
     </div>
 
@@ -512,12 +518,11 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
           <div class="tl-head">
             <span class="num">시각</span>
             <span class="hp">계획</span>
-            <span class="ha">실제 <button class="js-manual">수기 추가</button></span>
+            <span class="ha">실제</span>
           </div>
           <div class="pane-tabs" id="paneTabs">
             <button class="pt" data-i="0" aria-selected="true">계획</button>
             <button class="pt" data-i="1" aria-selected="false">실제</button>
-            <button class="js-manual" id="manualM" hidden>수기 추가</button>
           </div>
           <div class="tl-wrap" id="tlWrap">
             <div class="tl-body" id="tlBody">
@@ -552,6 +557,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 
 <div class="overlay" id="overlay" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 <div class="overlay photo" id="photoOv" hidden><img id="photoImg" alt="사진"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script>
 /* ============================== helpers ============================== */
@@ -562,7 +568,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.14.1";
+const BUILD = "0.16.1";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -775,8 +781,19 @@ function importAll(file) {
   };
   r.readAsText(file);
 }
-function setReadOnly(msg) { readOnly = true; note(msg); render(); }
-function note(msg) { const n = $("#syncNote"); n.textContent = msg; n.hidden = false; }
+function setReadOnly(msg) { readOnly = true; note(msg, 12000); render(); }
+/* 알림은 화면 위에 카드로 눌러앉지 않고 아래에 잠깐 떴다 사라진다 — 위쪽 카드가
+   계획표를 계속 밀어내고 있었다(사용자 요청 2026-10-21 "상단 메시지카드 제거"). */
+let toastT = null;
+function note(msg, ms) {
+  const n = $("#toast"); if (!n) return;
+  n.textContent = msg;
+  n.hidden = false;
+  n.classList.toggle("up", !$("#runBar").hidden);
+  requestAnimationFrame(() => n.classList.add("on"));
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { n.classList.remove("on"); setTimeout(() => { if (!n.classList.contains("on")) n.hidden = true; }, 220); }, ms || 4200);
+}
 
 /* ============================== state ============================== */
 const S = {
@@ -879,7 +896,8 @@ render();
   /* 메모 — 날짜에도 달성률에도 안 묶이는 목록(로드맵 §7-10). days/* 를 안 건드리므로
      통계가 이 목록을 영영 보지 못한다 = 달성률에서 저절로 빠진다. */
   watch("settings/notes", (d) => {
-    S.nt = { items: Array.isArray(d && d.items) ? d.items : [] };
+    /* 할 것/메모 구분은 없앴다(정신없다는 지적 2026-10-21) — 전부 체크리스트 한 가지다. */
+    S.nt = { items: (Array.isArray(d && d.items) ? d.items : []).map((x) => (x && (x.done === undefined || x.done === null) ? Object.assign({}, x, { done: false }) : x)) };
     if (S.view === "over") drawOver();
     drawNoteChip();
   });
@@ -958,9 +976,6 @@ function drawDate() {
   const isT = S.dateKey === keyOf(new Date());
   $("#dowLabel").textContent = DOW[d.getDay()] + "요일" + (isT ? " · 오늘" : "");
   $("#goToday").hidden = isT;
-  const f = fillable().length;
-  $("#fillBtn").hidden = !f;
-  $("#fillBtn").textContent = "계획대로 채우기 " + f;
 }
 function drawTagSelect() {
   const sel = $("#newTag"), cur = sel.value;
@@ -1172,14 +1187,7 @@ function bindTaskDrag(ul) {
       const row = h.closest("li");
       row.classList.add("dragging");
       let changed = false;
-      const move = (ev) => {
-        const over = document.elementFromPoint(ul.getBoundingClientRect().left + 12, ev.clientY);
-        const tgt = over && over.closest && over.closest("li");
-        if (!tgt || tgt === row || tgt.parentNode !== ul) return;
-        const r = tgt.getBoundingClientRect(), before = ev.clientY < r.top + r.height / 2;
-        if (before) { if (tgt.previousSibling !== row) { ul.insertBefore(row, tgt); changed = true; } }
-        else if (tgt.nextSibling !== row) { ul.insertBefore(row, tgt.nextSibling); changed = true; }
-      };
+      const move = (ev) => { if (dragMoveTo(ul, row, ev.clientY)) changed = true; };
       const done = () => {
         window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", done); window.removeEventListener("pointercancel", done);
         row.classList.remove("dragging");
@@ -1222,7 +1230,6 @@ function drawTimeline() {
     live = blockHTML({ id: "__live", taskId: S.running.taskId, label: S.running.label, tagId: S.running.tagId, start: s, end: e, note: S.running.note || "", m: S.running.m || null, place: S.running.place || "", ph: S.running.ph || "", pht: S.running.pht || "" }, "log", true);
   }
   $("#trackAct").innerHTML = d.logs.slice().sort((a, b) => a.start - b.start).map((l) => blockHTML(l, "log")).join("") + live;
-  document.querySelectorAll(".js-manual").forEach((b) => { b.hidden = readOnly || (b.id === "manualM" && S.pane !== 1); });
   /* 기록 중인 일에 적어 둔 금액도 센다 — 블록에는 보이는데 합계엔 없으면 "안 오른다"로 보인다
      (사용자 신고 2026-10-21). 아직 logs에 들어가지 않았을 뿐 이미 쓴 돈이다. */
   const runKw = (S.running && S.running.dateKey === d.date) ? krwOf(S.running) : 0;
@@ -1390,21 +1397,6 @@ function startRun(t) { beginRun(t ? t.id : null, t ? t.title : "기록 중", t ?
 function logFromPlan(p) {
   day().logs.push({ id: uid(), taskId: p.taskId || null, label: p.taskId ? "" : (p.label || "기록"), tagId: p.taskId ? (task(p.taskId) || {}).tagId : p.tagId, start: p.start, end: p.end, note: p.note || "" });
 }
-function fillable() {
-  if (readOnly || S.dateKey !== keyOf(new Date())) return [];
-  const d = day(), now = nowMin();
-  return d.plans.filter((p) => p.end <= now && !d.logs.some((l) =>
-    Math.min(p.end, l.end) - Math.max(p.start, l.start) > 0 &&
-    (p.taskId ? l.taskId === p.taskId : (l.label || "") === (p.label || ""))));
-}
-function fillFromPlan() {
-  const list = fillable();
-  if (!list.length) { note("옮길 계획이 없습니다."); return; }
-  list.forEach(logFromPlan);
-  saveDay(); render();
-  note(list.length + "건을 계획대로 실제 기록에 옮겼습니다. 틀린 건 블록을 눌러 고치세요.");
-}
-$("#fillBtn").onclick = fillFromPlan;
 /* Writes the stretch that has been running since startMin as one record. */
 async function commitSegment(r) {
   if (!r || r.paused || !r.startMs) return null;
@@ -1451,6 +1443,7 @@ $("#runPause").onclick = () => pauseRun();
    Existing block: drag to move it. Both land on 30-minute marks; the sheet still edits to the minute. */
 const SNAP = 30;
 const HOLD_MS = 450;        /* 폰에서 드래그가 시작되기까지 누르고 있어야 하는 시간 */
+const HOLD_TOL = 24;        /* 누르고 있는 동안 허용하는 흔들림(px). 작으면 "가끔 드래그가 안 된다"가 된다 */
 ["#trackPlan", "#trackAct"].forEach((sel) => {
   const el = $(sel), kind = el.dataset.kind;
   let drag = null, hold = null;
@@ -1513,11 +1506,12 @@ const HOLD_MS = 450;        /* 폰에서 드래그가 시작되기까지 누르�
     if (!drag || drag.mode === "live") return;
     // sideways swipe on a phone = move to the other track
     const dx = e.clientX - drag.x0;
-    if (!drag.moved && isPhone() && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(e.clientY - drag.y0) * 1.4) {
+    if (!drag.moved && isPhone() && Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(e.clientY - drag.y0) * 1.8) {
       setPane(dx < 0 ? 1 : 0); clear(); return;
     }
     const dy = Math.abs(e.clientY - drag.y0);
-    if (!drag.active) { if (dy > 14) clear(); return; }   // wobble is fine; a real swipe scrolls the page
+    /* 손가락은 가만히 있어도 조금 흔들린다. 좁게 잡으면 길게 눌러도 드래그가 안 걸린다(사용자 신고 2026-10-21). */
+    if (!drag.active) { if (dy > HOLD_TOL) clear(); return; }
     if (dy > 7) drag.moved = true;
     if (!drag.moved) return;
     if (drag.mode === "move") enterDragMode();
@@ -1565,10 +1559,6 @@ const HOLD_MS = 450;        /* 폰에서 드래그가 시작되기까지 누르�
     if (b.dataset.id === "__live") runSheet(); else blockSheet(kind, b.dataset.id);
   });
 });
-document.querySelectorAll(".js-manual").forEach((b) => b.onclick = () => {
-  const a = Math.floor(nowMin() / 10) * 10;
-  blockSheet("log", null, { start: clamp(a - 30, S.set.dayStart, S.set.dayEnd - 10), end: clamp(a, S.set.dayStart + 10, S.set.dayEnd) });
-});
 
 /* ---- phone: one track fills the width; tabs or a sideways swipe move between them ---- */
 function isPhone() { try { return window.matchMedia("(max-width:899px)").matches; } catch (e) { return false; } }
@@ -1576,7 +1566,6 @@ function setPane(i) {
   S.pane = i = i ? 1 : 0;
   $("#panes").style.setProperty("--pane-x", i ? "calc(-100% - 8px)" : "0px");
   document.querySelectorAll(".pane-tabs .pt").forEach((b) => b.setAttribute("aria-selected", +b.dataset.i === i));
-  document.querySelectorAll(".js-manual").forEach((b) => { if (b.id === "manualM") b.hidden = readOnly || i !== 1; });
 }
 document.querySelectorAll(".pane-tabs .pt").forEach((b) => b.onclick = () => setPane(+b.dataset.i));
 setPane(0);
@@ -1662,8 +1651,38 @@ try {
   new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(killAC))).observe(document.body, { childList: true, subtree: true });
 } catch (e) { }
 
-function closeSheet() { $("#overlay").hidden = true; $("#sheet").innerHTML = ""; }
-$("#photoOv").onclick = () => { $("#photoOv").hidden = true; $("#photoImg").src = ""; };
+/* ===== 뒤로가기 =====
+   안드로이드 뒤로 버튼·제스처가 앱을 나가 버리는 대신 한 단계씩 되돌아오게 한다.
+   연 것(사진 → 시트 → 다른 탭) 순서대로 닫고, 더 닫을 게 없으면 그때 앱을 나간다.
+   우리가 부른 history.back()은 navBusy로 걸러 두 번 닫히지 않게 한다. */
+const navStack = [];
+let navBusy = false;
+function navPush(k) { navStack.push(k); try { history.pushState({ pa: k }, ""); } catch (e) { } }
+function navPop(k) {
+  const i = navStack.lastIndexOf(k); if (i < 0) return;
+  navStack.splice(i, 1);
+  navBusy = true;
+  try { history.back(); } catch (e) { }
+  setTimeout(() => { navBusy = false; }, 150);
+}
+function hidePhoto(fromPop) { $("#photoOv").hidden = true; $("#photoImg").src = ""; if (!fromPop) navPop("photo"); }
+function showPhoto(src) { $("#photoImg").src = src || ""; $("#photoOv").hidden = false; navPush("photo"); }
+function navTab(away) {
+  const top = navStack[navStack.length - 1];
+  if (away) { if (top !== "tab") navPush("tab"); }
+  else if (top === "tab") navPop("tab");
+}
+addEventListener("popstate", () => {
+  if (navBusy) return;
+  const kind = navStack.pop();
+  if (kind === "photo") { hidePhoto(true); return; }
+  if (kind === "sheet") { closeSheetRaw(); return; }
+  if (kind === "tab") { $("#tabToday").click(); return; }
+});
+
+function closeSheetRaw() { $("#overlay").hidden = true; $("#sheet").innerHTML = ""; }
+function closeSheet() { closeSheetRaw(); navPop("sheet"); }
+$("#photoOv").onclick = () => hidePhoto();
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#photoOv").hidden) $("#photoOv").click(); });
 $("#overlay").addEventListener("pointerdown", (e) => { if (e.target.id === "overlay") closeSheet(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#overlay").hidden) closeSheet(); });
@@ -1683,7 +1702,9 @@ document.addEventListener("click", (e) => {
 }, true);
 function openSheet(html) {
   sheetOpenedAt = Date.now();
+  const was = $("#overlay").hidden;          /* 시트 안에서 시트로 넘어갈 땐 단계를 더 쌓지 않는다 */
   $("#sheet").innerHTML = html; $("#overlay").hidden = false;
+  if (was) navPush("sheet");
   const f = $("#sheet").querySelector("input,select,textarea,button"); if (f) f.focus();
 }
 function tagOptions(cur) { return S.set.tags.map((t) => '<option value="' + esc(t.id) + '"' + (t.id === cur ? " selected" : "") + ">" + esc(t.name) + "</option>").join(""); }
@@ -1821,7 +1842,7 @@ function moneyFieldOn(p, o) {
       }
       fInp.value = "";
     };
-    fImg.onclick = () => { if (ph.full) { $("#photoImg").src = ph.full; $("#photoOv").hidden = false; } else if (ph.id) photoView(ph.id, ph.thumb); };
+    fImg.onclick = () => { if (ph.full) showPhoto(ph.full); else if (ph.id) photoView(ph.id, ph.thumb); };
     $("#" + p + "FX").onclick = () => { ph = { id: "", thumb: "", full: "", dirty: true, old: ph.old }; fImg.src = ""; fBody.hidden = true; fChip.hidden = false; };
   }
   return { money: () => rows, place: () => (pIn ? pIn.value.trim().slice(0, 40) : ""), photo: () => ph };
@@ -1864,7 +1885,7 @@ async function photoRead(id) { const d = await readOnce("photos/" + id); return 
 /* 큰 사진 보기 — 탭하면 그때 불러온다(목록에서는 미리보기만 쓴다) */
 async function photoView(id, thumb) {
   const ov = $("#photoOv"), img = $("#photoImg");
-  img.src = thumb || ""; ov.hidden = false;
+  showPhoto(thumb || "");
   const full = await photoRead(id);
   if (full && !ov.hidden) img.src = full;
 }
@@ -2191,13 +2212,6 @@ function dayStats(d) {
     krw += v;                                   /* 총액은 언제나 m.krw — 줄이 여러 개여도 합계가 들어 있다 */
     moneyRowsOf(l).forEach((r) => { const k = r.cat || ""; krwCat[k] = (krwCat[k] || 0) + r.krw; });
   });
-  /* 장소 — 어디서 얼마나 있었고 얼마를 썼나(§3-3). "어디서 공부가 잘 되나"의 재료가 된다. */
-  const plcMin = {}, plcKrw = {};
-  logs.forEach((l) => {
-    const pl = placeOf(l); if (!pl) return;
-    plcMin[pl] = (plcMin[pl] || 0) + Math.max(0, l.end - l.start);
-    const v = krwOf(l); if (v) plcKrw[pl] = (plcKrw[pl] || 0) + v;
-  });
   /* 태그별 할일 달성 */
   const tagTasks = {};
   tasks.forEach((t) => { const k = t.tagId || "etc"; const o = tagTasks[k] = tagTasks[k] || { total: 0, done: 0 }; o.total++; if (t.done) o.done++; });
@@ -2205,7 +2219,7 @@ function dayStats(d) {
     date: d.date, total: tasks.length, done: tasks.filter((t) => t.done).length,
     rate: tasks.length ? tasks.filter((t) => t.done).length / tasks.length : null,
     planMin, actMin, kept, keepRate: planMin ? kept / planMin : null, byTag,
-    extra: Object.keys(extraKeys).length, accPlan, accAct, accN, tagTasks, krw, krwCat, plcMin, plcKrw
+    extra: Object.keys(extraKeys).length, accPlan, accAct, accN, tagTasks, krw, krwCat
   };
 }
 async function drawStats() {
@@ -2217,7 +2231,7 @@ async function drawStats() {
   const todayKey = keyOf(new Date());
   const t = map[todayKey] || dayStats(emptyDay(todayKey));
 
-  const last = (n) => { const o = []; for (let i = n - 1; i >= 0; i--) { const k = shiftKey(todayKey, -i); o.push(map[k] || { date: k, total: 0, done: 0, rate: null, planMin: 0, actMin: 0, kept: 0, keepRate: null, byTag: {}, extra: 0, accPlan: 0, accAct: 0, accN: 0, tagTasks: {}, krw: 0, krwCat: {}, plcMin: {}, plcKrw: {} }); } return o; };
+  const last = (n) => { const o = []; for (let i = n - 1; i >= 0; i--) { const k = shiftKey(todayKey, -i); o.push(map[k] || { date: k, total: 0, done: 0, rate: null, planMin: 0, actMin: 0, kept: 0, keepRate: null, byTag: {}, extra: 0, accPlan: 0, accAct: 0, accN: 0, tagTasks: {}, krw: 0, krwCat: {} }); } return o; };
   const w = last(7), m30 = last(30), d14 = last(14);
   const sum = (a, f) => a.reduce((s, x) => s + (f(x) || 0), 0);
   /* 주간 달성은 건수 합계 기준 — 할일이 한두 개뿐인 날이 평균을 흔들지 않게 */
@@ -2277,27 +2291,7 @@ async function drawStats() {
         return '<i style="background:' + c + '" title="' + d.date + " · " + (r == null ? "기록 없음" : Math.round(r * 100) + "%") + '"></i>';
       }).join("") +
     '</div><div class="legend"><span>왼쪽이 30일 전, 오른쪽이 오늘 · 진할수록 달성률이 높습니다</span></div></div></div>' +
-    moneySection() + placeSection() + habitSection() + timeSection();
-
-  /* 장소 — 최근 30일 동안 어디서 얼마나 있었고 얼마를 썼나(§3-3).
-     적은 적이 없으면 아무것도 보여주지 않는다. 뒤에 "장소별 달성률"이 붙을 자리다. */
-  function placeSection() {
-    const pm = {}, pk = {};
-    m30.forEach((d) => {
-      Object.keys(d.plcMin || {}).forEach((k) => pm[k] = (pm[k] || 0) + d.plcMin[k]);
-      Object.keys(d.plcKrw || {}).forEach((k) => pk[k] = (pk[k] || 0) + d.plcKrw[k]);
-    });
-    const keys = Object.keys(pm).sort((a, b) => pm[b] - pm[a]).slice(0, 10);
-    if (!keys.length) return "";
-    const mx = Math.max(1, ...keys.map((k) => pm[k]));
-    return '<div class="sec-t">장소 · 최근 30일</div>' +
-      '<div class="card"><div class="card-b"><div class="rows">' +
-        keys.map((k) =>
-          '<div class="row2"><span class="tag" style="--c:var(--plan)">' + esc(k) + "</span>" +
-          '<span class="bar"><i style="width:' + (pm[k] / mx * 100) + '%;--c:var(--plan)"></i></span>' +
-          '<span class="n">' + dur(pm[k]) + (pk[k] ? " · " + fmtKrw(pk[k]) + "원" : "") + "</span></div>").join("") +
-      '</div><div class="legend"><span>기록에 장소를 적으면 모입니다 · 막대는 머문 시간</span></div></div></div>';
-  }
+    moneySection() + habitSection() + timeSection();
 
   /* 지출 — 기록 블록에 적은 금액의 합계. 적은 게 하나도 없으면 아무것도 보여주지 않는다(로드맵 §3). */
   function moneySection() {
@@ -2436,27 +2430,67 @@ function addGoal(which, title, due) {
 }
 
 function saveNt() { save("settings/notes", { items: S.nt.items }); }
+/* 메모 목록 — 순서가 곧 우선순위다. 안 끝낸 것 위 3개는 굵게(사용자 요청 2026-10-21). */
+function ntListHTML() {
+  const its = S.nt.items || [];
+  const live = its.filter((x) => !x.done), done = its.filter((x) => x.done);
+  const row = (x, rank) =>
+    '<li class="' + (x.done ? "done" : "") + (rank && rank <= 3 ? " top" : "") + '" data-id="' + esc(x.id) + '">' +
+    '<span class="nhandle" title="끌어서 순서 바꾸기">⠿</span>' +
+    '<button class="g-chk n-chk" data-id="' + esc(x.id) + '" aria-pressed="' + (!!x.done) + '" title="완료 표시">' + (x.done ? "✓" : "") + "</button>" +
+    '<button class="n-text" data-id="' + esc(x.id) + '">' + (rank && rank <= 3 ? '<i class="rk">' + rank + "</i>" : "") + esc(x.text || "(빈 메모)") + "</button>" +
+    '<button class="iconbtn n-del" data-id="' + esc(x.id) + '" title="삭제">✕</button></li>';
+  return '<ul class="goals notes">' + live.map((x, i) => row(x, i + 1)).join("") + done.map((x) => row(x, 0)).join("") + "</ul>";
+}
+/* 끌어 놓을 자리 찾기 — elementFromPoint로 집으면 줄 사이 여백·안쪽 패딩에서 목록(ul)이 잡혀
+   "가끔 드래그가 안 되는" 원인이 된다(사용자 신고 2026-10-21). 줄 높이로 직접 계산한다. */
+function dragMoveTo(ul, row, y) {
+  const kids = [].slice.call(ul.children).filter((el) => el !== row);
+  let before = null;
+  for (let i = 0; i < kids.length; i++) {
+    const r = kids[i].getBoundingClientRect();
+    if (y < r.top + r.height / 2) { before = kids[i]; break; }
+  }
+  if (before) { if (row.nextSibling === before) return false; ul.insertBefore(row, before); return true; }
+  if (ul.lastElementChild === row) return false;
+  ul.appendChild(row); return true;
+}
+function bindNtDrag(host, after) {
+  const ul = host.querySelector("ul.notes"); if (!ul) return;
+  ul.querySelectorAll(".nhandle").forEach((h) => {
+    h.onpointerdown = (e) => {
+      if (e.button === 2) return;
+      e.preventDefault();
+      const row = h.closest("li");
+      row.classList.add("dragging");
+      let changed = false;
+      const move = (ev) => { if (dragMoveTo(ul, row, ev.clientY)) changed = true; };
+      const done = () => {
+        window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", done); window.removeEventListener("pointercancel", done);
+        row.classList.remove("dragging");
+        if (!changed) return;
+        const by = {}; (S.nt.items || []).forEach((x) => by[x.id] = x);
+        const out = [];
+        [...ul.children].forEach((li) => { const x = by[li.dataset.id]; if (x) out.push(x); });
+        (S.nt.items || []).forEach((x) => { if (out.indexOf(x) < 0) out.push(x); });
+        S.nt.items = out; saveNt(); drawNoteChip(); if (after) after();
+      };
+      window.addEventListener("pointermove", move); window.addEventListener("pointerup", done); window.addEventListener("pointercancel", done);
+    };
+  });
+}
 function ntFind(id) { return (S.nt.items || []).find((x) => x && x.id === id); }
 /* 메모 목록 조작 — 길게 누르면 ☐ 할 것 ↔ ✎ 메모. done 키 자체를 넣고 빼서 구분한다. */
 function bindNotes(host, inSheet) {
   const redraw = () => { saveNt(); if (S.view === "over") drawOver(); drawNoteChip(); if (inSheet) noteListSheet(); };
   host.querySelectorAll(".n-chk").forEach((b) => {
-    const id = b.getAttribute("data-id");
-    let hold = null, held = false;
-    const start = () => { held = false; hold = setTimeout(() => { held = true; swapKind(id); redraw(); }, 450); };
-    const stop = () => { if (hold) { clearTimeout(hold); hold = null; } };
-    b.addEventListener("pointerdown", start);
-    b.addEventListener("pointerup", stop);
-    b.addEventListener("pointerleave", stop);
-    b.addEventListener("pointercancel", stop);
     b.onclick = () => {
-      if (held) { held = false; return; }          /* 길게 눌러 바뀐 뒤 따라오는 클릭은 무시 */
-      const x = ntFind(id); if (!x || readOnly) return;
-      if (x.done === undefined || x.done === null) return;   /* 메모는 체크하지 않는다 */
+      const x = ntFind(b.getAttribute("data-id")); if (!x || readOnly) return;
       x.done = !x.done; x.doneAt = x.done ? keyOf(new Date()) : null;
       redraw();
     };
   });
+  bindNtDrag(host, () => { if (S.view === "over") drawOver(); if (inSheet) noteListSheet(); });
   host.querySelectorAll(".n-text").forEach((el) => {
     el.onclick = () => noteSheet(el.getAttribute("data-id"), inSheet);
   });
@@ -2482,22 +2516,14 @@ function bindNotes(host, inSheet) {
    목표 탭 맨 아래 구역도 그대로 둔다(거기서 넓게 보고 싶을 수 있다). */
 function noteListSheet() {
   const its = S.nt.items || [];
-  const live = its.filter((x) => !x.done), done = its.filter((x) => x.done);
-  const row = (x) => {
-    const memo = x.done === undefined || x.done === null;
-    return '<li class="' + (x.done ? "done" : "") + '">' +
-      '<button class="g-chk n-chk' + (memo ? " memo" : "") + '" data-id="' + esc(x.id) + '" aria-pressed="' + (!!x.done) + '">' +
-      (memo ? "✎" : (x.done ? "✓" : "")) + "</button>" +
-      '<button class="n-text" data-id="' + esc(x.id) + '">' + esc(x.text || "(빈 메모)") + "</button>" +
-      '<button class="iconbtn n-del" data-id="' + esc(x.id) + '" title="삭제">✕</button></li>';
-  };
+  const live = its.filter((x) => !x.done);
   openSheet('<h3>메모' + (live.length ? ' <span class="g-count">' + live.length + "개 남음</span>" : "") + "</h3>" +
     '<div class="g-add-row n-row" style="margin-top:0;padding-top:0;border-top:0">' +
       '<input class="g-new n-new" type="text" maxlength="200" placeholder="적어 두기 (예: 장학금 신청 확인)">' +
       '<button class="btn n-add">추가</button></div>' +
-    (its.length ? '<ul class="goals notes" style="margin-top:12px">' + live.map(row).join("") + done.map(row).join("") + "</ul>"
+    (its.length ? ntListHTML()
       : '<div class="empty" style="padding:18px 4px"><b>비어 있습니다</b>확인할 것·살 것처럼 시간으로 적기 애매한 걸 두세요.</div>') +
-    '<div class="legend" style="margin-top:10px"><span>줄을 누르면 넓게 고칠 수 있습니다 · 아이콘을 길게 누르면 ☐ ↔ ✎</span></div>' +
+    '<div class="legend" style="margin-top:10px"><span>줄을 누르면 넓게 고칠 수 있습니다 · 끌면 순서가 바뀝니다 · 위 3개는 굵게</span></div>' +
     '<div class="sheet-foot"><button class="btn ghost" id="nlClose">닫기</button></div>');
   bindNotes($("#sheet"), true);
   $("#nlClose").onclick = closeSheet;
@@ -2505,20 +2531,12 @@ function noteListSheet() {
 }
 function noteSheet(id, back) {
   const x = ntFind(id); if (!x) return;
-  const memo = x.done === undefined || x.done === null;
   openSheet('<h3>메모</h3>' +
     '<div class="fld"><textarea id="nText" rows="5" maxlength="1000" placeholder="적어 둘 것">' + esc(x.text || "") + "</textarea></div>" +
-    '<div class="fld"><label>종류</label><div class="seg2">' +
-      '<button class="btn ghost" type="button" id="nKindT" aria-pressed="' + (!memo) + '">☐ 할 것</button>' +
-      '<button class="btn ghost" type="button" id="nKindM" aria-pressed="' + memo + '">✎ 메모</button>' +
-    "</div>" + (memo ? "" : '<label class="hb-autolab" style="margin-top:9px;display:flex;align-items:center;gap:7px;font-size:13px">' +
-      '<input type="checkbox" id="nDone"' + (x.done ? " checked" : "") + "> 다 했음</label>") + "</div>" +
+    '<label class="hb-autolab" style="display:flex;align-items:center;gap:7px;font-size:13px;margin-bottom:12px">' +
+      '<input type="checkbox" id="nDone"' + (x.done ? " checked" : "") + "> 다 했음</label>" +
     '<div class="sheet-foot"><button class="btn danger del" id="nDel">삭제</button>' +
     '<button class="btn ghost" id="nCancel">취소</button><button class="btn go-save" id="nSave">저장</button></div>');
-  let kind = memo ? "m" : "t";
-  const paint = () => { $("#nKindT").setAttribute("aria-pressed", kind === "t"); $("#nKindM").setAttribute("aria-pressed", kind === "m"); };
-  $("#nKindT").onclick = () => { kind = "t"; paint(); };
-  $("#nKindM").onclick = () => { kind = "m"; paint(); };
   const after = () => { if (back) noteListSheet(); else closeSheet(); };
   $("#nCancel").onclick = after;
   $("#nDel").onclick = () => {
@@ -2529,18 +2547,10 @@ function noteSheet(id, back) {
   $("#nSave").onclick = () => {
     const y = ntFind(id); if (!y) { closeSheet(); return; }
     y.text = $("#nText").value.trim().slice(0, 1000);
-    if (kind === "m") { delete y.done; delete y.doneAt; }
-    else {
-      const dd = $("#nDone") ? $("#nDone").checked : !!y.done;
-      y.done = dd; y.doneAt = dd ? keyOf(new Date()) : null;
-    }
+    const dd = $("#nDone") ? $("#nDone").checked : !!y.done;
+    y.done = dd; y.doneAt = dd ? keyOf(new Date()) : null;
     saveNt(); if (S.view === "over") drawOver(); drawNoteChip(); after();
   };
-}
-function swapKind(id) {
-  const x = ntFind(id); if (!x || readOnly) return;
-  if (x.done === undefined || x.done === null) { x.done = false; }   /* 메모 → 할 것 */
-  else { delete x.done; delete x.doneAt; }                            /* 할 것 → 메모 */
 }
 /* 오늘 탭에서도 몇 개 남았는지 보이게 — 누르면 목표 탭의 메모로 간다 */
 function drawNoteChip() {
@@ -2653,28 +2663,18 @@ async function drawOver(force) {
      ③ 체크 없는 메모도 섞어 둘 수 있다(done 키가 없으면 메모). */
   function noteBody() {
     const its = S.nt.items || [];
-    const live = its.filter((x) => !x.done), done = its.filter((x) => x.done);
-    const row = (x) => {
-      const memo = x.done === undefined || x.done === null;
-      return '<li class="' + (x.done ? "done" : "") + '">' +
-        '<button class="g-chk n-chk' + (memo ? " memo" : "") + '" data-id="' + esc(x.id) + '" aria-pressed="' + (!!x.done) + '" ' +
-        'title="' + (memo ? "메모입니다 · 길게 누르면 체크하는 할 것으로 바뀝니다" : "완료 표시 · 길게 누르면 체크 없는 메모로 바뀝니다") + '">' +
-        (memo ? "✎" : (x.done ? "✓" : "")) + "</button>" +
-        '<button class="n-text" data-id="' + esc(x.id) + '">' + esc(x.text || "(빈 메모)") + "</button>" +
-        '<button class="iconbtn n-del" data-id="' + esc(x.id) + '" title="삭제">✕</button></li>';
-    };
+    const live = its.filter((x) => !x.done);
     return '<div class="sec-t" id="noteTop">메모</div>' +
       '<div class="card" id="noteCard"><div class="card-h"><h2>적어 둘 것</h2>' +
         '<span class="g-count">' + (live.length ? live.length + "개 남음" : its.length ? "다 했습니다" : "") + "</span></div>" +
       '<div class="card-b">' +
-        (its.length
-          ? '<ul class="goals notes">' + live.map(row).join("") + done.map(row).join("") + "</ul>"
+        (its.length ? ntListHTML()
           : '<div class="empty"><b>비어 있습니다</b>확인할 것·살 것처럼 시간으로 적기 애매한 걸 두세요. 날짜에 묶이지 않고 달성률에도 들어가지 않습니다.</div>') +
         '<div class="g-add-row n-row">' +
           '<input class="g-new n-new" type="text" maxlength="200" placeholder="적어 두기 (예: 장학금 신청 확인)">' +
           '<button class="btn n-add">추가</button>' +
         "</div>" +
-        '<div class="legend"><span>체크 아이콘을 길게 누르면 ☐ 할 것 ↔ ✎ 메모가 바뀝니다</span>' +
+        '<div class="legend"><span>끌어서 순서를 바꿀 수 있습니다 · 위 3개는 굵게 표시됩니다</span>' +
         (done.length ? '<span><button class="lnk n-clear">완료한 것 ' + done.length + "개 지우기</button></span>" : "") +
       "</div></div></div>";
   }
@@ -2852,15 +2852,7 @@ function drawSettings() {
       row.classList.add("dragging");
       let changed = false;
       /* 줄을 옮기면 DOM에서 빠졌다 들어가 포인터 캡처가 풀리므로 window에서 받는다 */
-      const move = (ev) => {
-        const over = document.elementFromPoint(list.getBoundingClientRect().left + 10, ev.clientY);
-        const tgt = over && over.closest && over.closest(".tagedit");
-        if (!tgt || tgt === row || tgt.parentNode !== list) return;
-        const r = tgt.getBoundingClientRect(), before = ev.clientY < r.top + r.height / 2;
-        const after = tgt.nextSibling;
-        if (before) { if (tgt.previousSibling !== row) { list.insertBefore(row, tgt); changed = true; } }
-        else if (after !== row) { list.insertBefore(row, tgt.nextSibling); changed = true; }
-      };
+      const move = (ev) => { if (dragMoveTo(list, row, ev.clientY)) changed = true; };
       const done = () => {
         window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", done); window.removeEventListener("pointercancel", done);
         row.classList.remove("dragging");
@@ -2960,14 +2952,15 @@ addEventListener("click", (e) => {
 /* ============================== nav ============================== */
 /* 다른 탭에서 탭 버튼으로 돌아오면 오늘 날짜로. 목표 탭의 날짜 클릭(data-go)은 view를 직접 바꾸므로 영향 없음. */
 $("#tabToday").onclick = () => {
+  navTab(false);
   const back = S.view !== "today", t = keyOf(new Date());
   S.view = "today";
   if (back && S.dateKey !== t) openDay(t); else render();
 };
-$("#tabStats").onclick = () => { S.view = "stats"; render(); drawStats(); };
-$("#tabOver").onclick = () => { S.view = "over"; S.ov.anchor = keyOf(new Date()); render(); drawOver(); loadWeekSummary(); loadHabitDays(true); };
+$("#tabStats").onclick = () => { navTab(true); S.view = "stats"; render(); drawStats(); };
+$("#tabOver").onclick = () => { navTab(true); S.view = "over"; S.ov.anchor = keyOf(new Date()); render(); drawOver(); loadWeekSummary(); loadHabitDays(true); };
 $("#noteChip").onclick = () => noteListSheet();
-$("#tabSet").onclick = () => { S.view = "set"; render(); };
+$("#tabSet").onclick = () => { navTab(true); S.view = "set"; render(); };
 $("#prevDay").onclick = () => openDay(shiftKey(S.dateKey, -1));
 $("#nextDay").onclick = () => openDay(shiftKey(S.dateKey, 1));
 $("#goToday").onclick = () => openDay(keyOf(new Date()));
