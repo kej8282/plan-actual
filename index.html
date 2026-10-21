@@ -562,7 +562,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.14.0";
+const BUILD = "0.14.1";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -983,15 +983,36 @@ function groupSuggest(tasks) {
   /* 이미 있는 묶음에 들어갈 만한 게 새로 들어왔는지 먼저 본다 —
      "마케팅조사론 8강"을 나중에 적었을 때 또 손으로 묶지 않게(사용자 요청 2026-10-21).
      이름이 묶음으로 시작할 때만 잡는다(가운데 우연히 겹치는 건 무시). */
-  const taken = {};
+  const taken = {}, into = {};
   const groups = [];
   tasks.forEach((t) => { const g = grpOf(t); if (g && groups.indexOf(g) < 0) groups.push(g); });
+  const add = (g, id) => { (into[g] = into[g] || []).push(id); taken[id] = 1; };
+  /* ① 이름이 묶음으로 시작하면 확실하다 ("마케팅조사론 8강") */
   groups.forEach((g) => {
-    const ids = list.filter((x) => !taken[x.id] && normT(x.s).indexOf(normT(g)) === 0).map((x) => x.id);
-    if (!ids.length) return;
-    ids.forEach((id) => taken[id] = 1);
-    out.push({ key: g, ids: ids, into: true });
+    list.forEach((x) => { if (!taken[x.id] && normT(x.s).indexOf(normT(g)) === 0) add(g, x.id); });
   });
+  /* ② 과목 이름 없이 "8강"처럼 적는 게 더 자연스럽다 → 그 묶음 식구들과 **모양이 같으면** 잡는다.
+     "2강"·"3강"의 모양은 숫자를 지운 "#강". 같은 모양을 두 묶음이 함께 주장하면 어느 쪽인지 알 수 없으니 묻지 않는다. */
+  const shape = (v) => normT(v).replace(/\d+/g, "#");
+  const pats = {};
+  groups.forEach((g) => {
+    const set = {};
+    tasks.forEach((t) => {
+      if (grpOf(t) !== g) return;
+      const tail = normT(t.title).indexOf(normT(g)) === 0 ? normT(t.title).slice(normT(g).length) : normT(t.title);
+      const sh = shape(tail);
+      if (sh && /#/.test(sh)) set[sh] = 1;
+    });
+    pats[g] = set;
+  });
+  list.forEach((x) => {
+    if (taken[x.id]) return;
+    const sh = shape(x.s);
+    if (!/#/.test(sh)) return;
+    const hit = groups.filter((g) => pats[g][sh]);
+    if (hit.length === 1) add(hit[0], x.id);
+  });
+  groups.forEach((g) => { if (into[g] && into[g].length) out.push({ key: g, ids: into[g], into: true }); });
   const rest = list.filter((x) => !taken[x.id]);
   let cur = null;
   for (let i = 0; i < rest.length; i++) {
