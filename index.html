@@ -562,7 +562,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.13.0";
+const BUILD = "0.14.0";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -974,26 +974,40 @@ function drawTagSelect() {
 function lcp(a, b) { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return a.slice(0, i); }
 function trimKey(k) { return k.replace(/[\s\-_.·,:]*\d*[\s\-_.·,:]*$/, "").trim(); }
 const gsugOff = {};
+function normT(x) { return (x || "").replace(/\s+/g, ""); }
 function groupSuggest(tasks) {
   const list = tasks.filter((t) => !grpOf(t) && (t.title || "").trim().length > 1)
     .map((t) => ({ id: t.id, s: t.title.trim() }))
     .sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : 0));
   const out = [];
+  /* 이미 있는 묶음에 들어갈 만한 게 새로 들어왔는지 먼저 본다 —
+     "마케팅조사론 8강"을 나중에 적었을 때 또 손으로 묶지 않게(사용자 요청 2026-10-21).
+     이름이 묶음으로 시작할 때만 잡는다(가운데 우연히 겹치는 건 무시). */
+  const taken = {};
+  const groups = [];
+  tasks.forEach((t) => { const g = grpOf(t); if (g && groups.indexOf(g) < 0) groups.push(g); });
+  groups.forEach((g) => {
+    const ids = list.filter((x) => !taken[x.id] && normT(x.s).indexOf(normT(g)) === 0).map((x) => x.id);
+    if (!ids.length) return;
+    ids.forEach((id) => taken[id] = 1);
+    out.push({ key: g, ids: ids, into: true });
+  });
+  const rest = list.filter((x) => !taken[x.id]);
   let cur = null;
-  for (let i = 0; i < list.length; i++) {
+  for (let i = 0; i < rest.length; i++) {
     if (cur) {
-      const k = trimKey(lcp(cur.key, list[i].s));
-      if (k.length >= 2) { cur.key = k; cur.ids.push(list[i].id); continue; }
+      const k = trimKey(lcp(cur.key, rest[i].s));
+      if (k.length >= 2) { cur.key = k; cur.ids.push(rest[i].id); continue; }
       if (cur.ids.length >= 2) out.push(cur);
       cur = null;
     }
-    if (i + 1 < list.length) {
-      const k = trimKey(lcp(list[i].s, list[i + 1].s));
-      if (k.length >= 2) { cur = { key: k, ids: [list[i].id] }; }
+    if (i + 1 < rest.length) {
+      const k = trimKey(lcp(rest[i].s, rest[i + 1].s));
+      if (k.length >= 2) { cur = { key: k, ids: [rest[i].id] }; }
     }
   }
   if (cur && cur.ids.length >= 2) out.push(cur);
-  return out.filter((c) => !gsugOff[c.key]).slice(0, 3);
+  return out.filter((c) => !gsugOff[c.key + (c.into ? "+" : "")]).slice(0, 3);
 }
 /* 묶어도 **제목은 그대로 둔다.** 한때 공통 부분을 떼어 냈는데, 그러면 타임라인 블록이
    "2강"만 남아 계획을 올릴 때 뭐가 뭔지 모르게 된다(사용자 지적 2026-10-20). */
@@ -1047,12 +1061,13 @@ function drawSug() {
   const cs = readOnly ? [] : groupSuggest(day().tasks);
   box.hidden = !cs.length;
   box.innerHTML = cs.map((c, i) =>
-    '<span class="sug" data-i="' + i + '"><button class="sugb" data-act="do">＋ &quot;' + esc(c.key) + '&quot; ' + c.ids.length + "개 묶기</button>" +
+    '<span class="sug" data-i="' + i + '"><button class="sugb" data-act="do">＋ &quot;' + esc(c.key) + '&quot; ' +
+    (c.into ? "묶음에 " + c.ids.length + "개 넣기" : c.ids.length + "개 묶기") + "</button>" +
     '<button class="sugx" data-act="no" title="이 제안 숨기기">✕</button></span>').join("");
   box.querySelectorAll("[data-act]").forEach((b) => {
     b.onclick = () => {
       const c = cs[+b.closest(".sug").dataset.i]; if (!c) return;
-      if (b.dataset.act === "no") { gsugOff[c.key] = 1; drawSug(); } else applyGroup(c.key, c.ids);
+      if (b.dataset.act === "no") { gsugOff[c.key + (c.into ? "+" : "")] = 1; drawSug(); } else applyGroup(c.key, c.ids);
     };
   });
 }
@@ -1184,8 +1199,11 @@ function drawTimeline() {
   }
   $("#trackAct").innerHTML = d.logs.slice().sort((a, b) => a.start - b.start).map((l) => blockHTML(l, "log")).join("") + live;
   document.querySelectorAll(".js-manual").forEach((b) => { b.hidden = readOnly || (b.id === "manualM" && S.pane !== 1); });
-  const kwDay = d.logs.reduce((s, l) => s + krwOf(l), 0);
-  $("#tlHint").innerHTML = (kwDay ? '<span class="kwsum">이 날 기록한 지출 ' + fmtKrw(kwDay) + "원</span><br>" : "") +
+  /* 기록 중인 일에 적어 둔 금액도 센다 — 블록에는 보이는데 합계엔 없으면 "안 오른다"로 보인다
+     (사용자 신고 2026-10-21). 아직 logs에 들어가지 않았을 뿐 이미 쓴 돈이다. */
+  const runKw = (S.running && S.running.dateKey === d.date) ? krwOf(S.running) : 0;
+  const kwDay = d.logs.reduce((s, l) => s + krwOf(l), 0) + runKw;
+  $("#tlHint").innerHTML = (kwDay ? '<span class="kwsum">이 날 기록한 지출 ' + fmtKrw(kwDay) + "원" + (runKw ? " (기록 중 " + fmtKrw(runKw) + "원 포함)" : "") + "</span><br>" : "") +
     (readOnly ? "보기 전용입니다."
     : "빈 칸을 끌어 만들기 · 블록을 끌어 옮기기 · 30분 단위<br>휴대폰에서는 길게 누른 뒤 끄세요 · 블록을 짧게 누르면 10분 단위로 수정");
   if (S.needScroll) requestAnimationFrame(() => { if (scrollToFocus()) S.needScroll = false; });
