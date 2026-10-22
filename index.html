@@ -321,6 +321,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .goals.notes li{grid-template-columns:18px 24px 1fr 28px}
 .nhandle{cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;color:var(--line);font-size:14px;line-height:1;text-align:center}
 .nhandle:hover{color:var(--muted)}
+.nhandle.off{cursor:default}
 .goals.notes li.dragging{opacity:.6;background:var(--surface-2)}
 .goals.notes li.top .n-text{font-weight:600}
 .goals.notes .rk{font-style:normal;font-family:var(--font-num);font-size:10.5px;color:var(--plan);margin-right:6px;font-weight:700}
@@ -568,7 +569,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.16.1";
+const BUILD = "0.16.2";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -785,11 +786,12 @@ function setReadOnly(msg) { readOnly = true; note(msg, 12000); render(); }
 /* 알림은 화면 위에 카드로 눌러앉지 않고 아래에 잠깐 떴다 사라진다 — 위쪽 카드가
    계획표를 계속 밀어내고 있었다(사용자 요청 2026-10-21 "상단 메시지카드 제거"). */
 let toastT = null;
+function toastPos() { const n = $("#toast"); if (n && !n.hidden) n.classList.toggle("up", !$("#runBar").hidden); }
 function note(msg, ms) {
   const n = $("#toast"); if (!n) return;
   n.textContent = msg;
   n.hidden = false;
-  n.classList.toggle("up", !$("#runBar").hidden);
+  toastPos();
   requestAnimationFrame(() => n.classList.add("on"));
   clearTimeout(toastT);
   toastT = setTimeout(() => { n.classList.remove("on"); setTimeout(() => { if (!n.classList.contains("on")) n.hidden = true; }, 220); }, ms || 4200);
@@ -988,7 +990,7 @@ function drawTagSelect() {
    "마케팅조사론 2강 / 마케팅조사론 3강" 도 "마케팅조사론2강 / 마케팅조사론3강" 도 잡힌다. */
 function lcp(a, b) { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return a.slice(0, i); }
 function trimKey(k) { return k.replace(/[\s\-_.·,:]*\d*[\s\-_.·,:]*$/, "").trim(); }
-const gsugOff = {};
+const gsugOff = LS.read("gsugOff") || {};
 function normT(x) { return (x || "").replace(/\s+/g, ""); }
 function sugKey(c) { return (c.into ? "+" : "") + c.key + "|" + c.ids.slice().sort().join(","); }
 function groupSuggest(tasks) {
@@ -1106,7 +1108,7 @@ function drawSug() {
   box.querySelectorAll("[data-act]").forEach((b) => {
     b.onclick = () => {
       const c = cs[+b.closest(".sug").dataset.i]; if (!c) return;
-      if (b.dataset.act === "no") { gsugOff[sugKey(c)] = 1; drawSug(); } else applyGroup(c.key, c.ids);
+      if (b.dataset.act === "no") { gsugOff[sugKey(c)] = 1; LS.write("gsugOff", gsugOff); drawSug(); } else applyGroup(c.key, c.ids);
     };
   });
 }
@@ -1281,8 +1283,9 @@ function runSeconds(r) {
 }
 function drawRun() {
   const b = $("#runBar");
-  if (!S.running) { b.hidden = true; return; }
+  if (!S.running) { b.hidden = true; toastPos(); return; }
   b.hidden = false;
+  toastPos();          /* 띠가 뒤늦게 올라와 떠 있던 알림을 덮지 않게 */
   const paused = !!S.running.paused;
   b.classList.toggle("paused", paused);
   $("#runTitle").textContent = S.running.label || "진행 중";
@@ -1662,8 +1665,10 @@ function navPop(k) {
   const i = navStack.lastIndexOf(k); if (i < 0) return;
   navStack.splice(i, 1);
   navBusy = true;
-  try { history.back(); } catch (e) { }
-  setTimeout(() => { navBusy = false; }, 150);
+  try { history.back(); } catch (e) { navBusy = false; return; }
+  /* 타이머로 내리면 그 사이에 들어온 **사용자의 진짜 뒤로가기**까지 삼킨다.
+     우리 back의 popstate가 도착할 때 내리고, 혹시 오지 않을 때만 뒤늦게 푼다. */
+  setTimeout(() => { navBusy = false; }, 600);
 }
 function hidePhoto(fromPop) { $("#photoOv").hidden = true; $("#photoImg").src = ""; if (!fromPop) navPop("photo"); }
 function showPhoto(src) { $("#photoImg").src = src || ""; $("#photoOv").hidden = false; navPush("photo"); }
@@ -1673,7 +1678,7 @@ function navTab(away) {
   else if (top === "tab") navPop("tab");
 }
 addEventListener("popstate", () => {
-  if (navBusy) return;
+  if (navBusy) { navBusy = false; return; }   /* 우리가 부른 back — 이번 한 번만 흘려보낸다 */
   const kind = navStack.pop();
   if (kind === "photo") { hidePhoto(true); return; }
   if (kind === "sheet") { closeSheetRaw(); return; }
@@ -2436,7 +2441,8 @@ function ntListHTML() {
   const live = its.filter((x) => !x.done), done = its.filter((x) => x.done);
   const row = (x, rank) =>
     '<li class="' + (x.done ? "done" : "") + (rank && rank <= 3 ? " top" : "") + '" data-id="' + esc(x.id) + '">' +
-    '<span class="nhandle" title="끌어서 순서 바꾸기">⠿</span>' +
+    (x.done ? '<span class="nhandle off" aria-hidden="true"></span>'
+            : '<span class="nhandle" title="끌어서 순서 바꾸기">⠿</span>') +
     '<button class="g-chk n-chk" data-id="' + esc(x.id) + '" aria-pressed="' + (!!x.done) + '" title="완료 표시">' + (x.done ? "✓" : "") + "</button>" +
     '<button class="n-text" data-id="' + esc(x.id) + '">' + (rank && rank <= 3 ? '<i class="rk">' + rank + "</i>" : "") + esc(x.text || "(빈 메모)") + "</button>" +
     '<button class="iconbtn n-del" data-id="' + esc(x.id) + '" title="삭제">✕</button></li>';
@@ -2663,7 +2669,7 @@ async function drawOver(force) {
      ③ 체크 없는 메모도 섞어 둘 수 있다(done 키가 없으면 메모). */
   function noteBody() {
     const its = S.nt.items || [];
-    const live = its.filter((x) => !x.done);
+    const live = its.filter((x) => !x.done), done = its.filter((x) => x.done);
     return '<div class="sec-t" id="noteTop">메모</div>' +
       '<div class="card" id="noteCard"><div class="card-h"><h2>적어 둘 것</h2>' +
         '<span class="g-count">' + (live.length ? live.length + "개 남음" : its.length ? "다 했습니다" : "") + "</span></div>" +
