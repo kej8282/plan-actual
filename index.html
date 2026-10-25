@@ -176,6 +176,10 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
 .chiprow{display:flex;gap:7px;flex-wrap:wrap}
 .addchip.sm{padding:5px 11px;font-size:11.5px;border-style:solid;border-radius:999px}
 .plcs .addchip.sm{color:var(--ink)}
+#dayPhoto{display:inline-flex;align-items:center;gap:6px}
+#dayPhoto.hasph{padding:4px 7px}
+#dayPhoto img{width:18px;height:18px;border-radius:4px;object-fit:cover;border:1px solid var(--line)}
+#dayPhoto.hasph{border-color:var(--actual);color:var(--actual)}
 .phwrap{display:flex;gap:10px;align-items:flex-start}
 .phthumb{width:92px;height:92px;flex:0 0 auto;object-fit:cover;border-radius:9px;border:1px solid var(--line);background:var(--surface-2);cursor:zoom-in}
 .phside{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
@@ -478,6 +482,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
       <div class="d" id="dateLabel">—</div>
       <div class="dow" id="dowLabel"></div>
       <div class="spacer"></div>
+      <button class="chip-btn" id="dayPhoto" title="이 날의 사진 한 장">사진</button>
       <button class="chip-btn" id="noteChip" title="시간으로 적기 애매한 것 — 목표 탭의 메모로 갑니다">메모</button>
       <button class="chip-btn" id="goToday">오늘</button>
     </div>
@@ -569,7 +574,7 @@ li.done .t-title{color:var(--muted);text-decoration:line-through}
    지난 흐름: 0.1 오늘복귀/운동자동 · 0.2 통계재편 · 0.3 폰 스크롤·스와이프·금액 ·
    0.4 기록중 시트 · 0.5 금액칩/지출분류 · 0.6 금액 여러줄 · 0.7 메모 · 0.8 장소 · 0.9 사진·달력
    BUILT은 폰에서 "언제 것인지" 보려고 같이 띄운다. **sw.js의 CACHE와 BUILD를 항상 같게 할 것.** */
-const BUILD = "0.16.2";
+const BUILD = "0.17.0";
 const BUILT = "2026-10-19";
 const $ = (s) => document.querySelector(s);
 const pad = (n) => String(n).padStart(2, "0");
@@ -978,6 +983,17 @@ function drawDate() {
   const isT = S.dateKey === keyOf(new Date());
   $("#dowLabel").textContent = DOW[d.getDay()] + "요일" + (isT ? " · 오늘" : "");
   $("#goToday").hidden = isT;
+  drawDayPhoto();
+}
+/* 그날의 사진 한 장 — 할일·기록과 무관하게 "오늘 하루"에 붙는다(사용자 요청 2026-10-25).
+   기록에 붙는 사진과 같은 방식: 큰 건 photos/<id>, 작은 미리보기만 날짜 문서에 둔다. */
+function dayThumb(rec) { const r = rec || day(); return r && typeof r.phdt === "string" ? r.phdt : ""; }
+function drawDayPhoto() {
+  const b = $("#dayPhoto"); if (!b) return;
+  const t = dayThumb();
+  b.classList.toggle("hasph", !!t);
+  /* 사진이 있으면 글자 없이 썸네일만 — 날짜줄이 두 줄로 접히면 그만큼 계획표가 밀린다 */
+  b.innerHTML = t ? '<img src="' + esc(t) + '" alt="이 날의 사진">' : "사진";
 }
 function drawTagSelect() {
   const sel = $("#newTag"), cur = sel.value;
@@ -1659,17 +1675,22 @@ try {
    연 것(사진 → 시트 → 다른 탭) 순서대로 닫고, 더 닫을 게 없으면 그때 앱을 나간다.
    우리가 부른 history.back()은 navBusy로 걸러 두 번 닫히지 않게 한다. */
 const navStack = [];
-let navBusy = false;
+let navBusy = false, navQueue = 0;
 function navPush(k) { navStack.push(k); try { history.pushState({ pa: k }, ""); } catch (e) { } }
 function navPop(k) {
   const i = navStack.lastIndexOf(k); if (i < 0) return;
   navStack.splice(i, 1);
-  navBusy = true;
-  try { history.back(); } catch (e) { navBusy = false; return; }
-  /* 타이머로 내리면 그 사이에 들어온 **사용자의 진짜 뒤로가기**까지 삼킨다.
-     우리 back의 popstate가 도착할 때 내리고, 혹시 오지 않을 때만 뒤늦게 푼다. */
-  setTimeout(() => { navBusy = false; }, 600);
+  navBack();
 }
+/* back()은 한 번에 하나씩만 보낸다. 앞의 popstate가 오기 전에 또 부르면 두 칸이 한꺼번에
+   빠지면서 앱 밖으로 나가 버린다(시트를 닫자마자 사진을 닫는 식으로 실제로 겹친다). */
+function navBack() {
+  if (navBusy) { navQueue++; return; }
+  navBusy = true;
+  try { history.back(); } catch (e) { navBusy = false; navFlush(); return; }
+  setTimeout(() => { if (navBusy) { navBusy = false; navFlush(); } }, 700);   /* popstate가 안 오면 뒤늦게 푼다 */
+}
+function navFlush() { if (navQueue > 0) { navQueue--; navBack(); } }
 function hidePhoto(fromPop) { $("#photoOv").hidden = true; $("#photoImg").src = ""; if (!fromPop) navPop("photo"); }
 function showPhoto(src) { $("#photoImg").src = src || ""; $("#photoOv").hidden = false; navPush("photo"); }
 function navTab(away) {
@@ -1678,7 +1699,7 @@ function navTab(away) {
   else if (top === "tab") navPop("tab");
 }
 addEventListener("popstate", () => {
-  if (navBusy) { navBusy = false; return; }   /* 우리가 부른 back — 이번 한 번만 흘려보낸다 */
+  if (navBusy) { navBusy = false; navFlush(); return; }   /* 우리가 부른 back — 흘려보내고 밀린 것을 잇는다 */
   const kind = navStack.pop();
   if (kind === "photo") { hidePhoto(true); return; }
   if (kind === "sheet") { closeSheetRaw(); return; }
@@ -2520,6 +2541,44 @@ function bindNotes(host, inSheet) {
    줄바꿈이 되는 넓은 칸 + 종류 바꾸기 + 삭제를 한 자리에 모았다. */
 /* 오늘 탭에서 바로 열리는 메모 창 — 목표 탭까지 내려가지 않게(사용자 지적 2026-10-20).
    목표 탭 맨 아래 구역도 그대로 둔다(거기서 넓게 보고 싶을 수 있다). */
+/* 하루 사진: 고르기 / 크게 보기 / 빼기 한자리 */
+function dayPhotoSheet() {
+  const d = day(), t = dayThumb(d), has = !!(d.phd && t);
+  openSheet('<h3>' + (S.dateKey === keyOf(new Date()) ? "오늘" : (parseKey(S.dateKey).getMonth() + 1) + "월 " + parseKey(S.dateKey).getDate() + "일") + "의 사진</h3>" +
+    (has ? '<div class="fld"><div class="phwrap"><img class="phthumb" id="dpImg" alt="이 날의 사진" src="' + esc(t) + '">' +
+      '<div class="phside"><div class="mini" style="color:var(--muted)">눌러서 크게 봅니다</div>' +
+      '<button class="btn ghost" type="button" id="dpX">사진 빼기</button></div></div></div>'
+      : '<div class="empty" style="padding:16px 4px"><b>아직 없습니다</b>그날을 한 장으로 남겨 두세요. 할일·기록과는 상관없습니다.</div>') +
+    '<div class="mini" id="dpMsg" style="color:var(--muted);margin-bottom:12px"></div>' +
+    '<input type="file" accept="image/*" id="dpFile" hidden>' +
+    '<div class="sheet-foot"><button class="btn ghost" id="dpCancel">닫기</button>' +
+    '<button class="btn go-save" id="dpPick">' + (has ? "다른 사진으로" : "사진 고르기") + "</button></div>");
+  const inp = $("#dpFile");
+  $("#dpCancel").onclick = closeSheet;
+  $("#dpPick").onclick = () => inp.click();
+  if (has) $("#dpImg").onclick = () => { if (d.phd) photoView(d.phd, t); };
+  if (has) $("#dpX").onclick = () => {
+    const old = d.phd;
+    delete d.phd; delete d.phdt;
+    saveDay(); if (old) del("photos/" + old);
+    closeSheet(); render(); hbDayCache = null; note("사진을 뺐습니다.");
+  };
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    $("#dpMsg").textContent = "줄이는 중…";
+    try {
+      const thumb = await shrink(f, PH_THUMB, 0.5), full = await shrink(f, PH_FULL, 0.7);
+      const cur = day(), old = cur.phd, id = "d" + uid();
+      save("photos/" + id, { id: id, d: full, at: Date.now() });
+      cur.phd = id; cur.phdt = thumb;
+      saveDay(); if (old && old !== id) del("photos/" + old);
+      hbDayCache = null;
+      closeSheet(); render(); note("이 날의 사진으로 올렸습니다.");
+    } catch (e) { $("#dpMsg").textContent = "이 사진은 읽을 수 없습니다."; }
+    inp.value = "";
+  };
+}
+
 function noteListSheet() {
   const its = S.nt.items || [];
   const live = its.filter((x) => !x.done);
@@ -2725,7 +2784,7 @@ async function drawOver(force) {
       const tip = k + (hbs.length ? " · " + hbs.map((x) => x.title + " " + hbCount(rec, x.id) + "/" + hbTarget(x)).join(", ") : "") +
         (hit.length ? " · 목표: " + hit.map((g) => g.title).join(", ") : "");
       /* 그날 사진 한 장을 칸 배경으로, 일일목표(할일) 달성은 아래 숫자로 — 사용자 요청 2026-10-19 */
-      const th = ((rec && rec.logs) || []).map(thumbOf).filter(Boolean)[0] || "";
+      const th = dayThumb(rec) || ((rec && rec.logs) || []).map(thumbOf).filter(Boolean)[0] || "";
       const tk = (rec && rec.tasks) || [];
       const tkDone = tk.filter((x) => x && x.done).length;
       cells.push('<button class="cell' + (k === todayKey ? " tdy" : "") + (th ? " hasph" : "") + '" data-go="' + k + '" title="' +
@@ -2966,6 +3025,7 @@ $("#tabToday").onclick = () => {
 $("#tabStats").onclick = () => { navTab(true); S.view = "stats"; render(); drawStats(); };
 $("#tabOver").onclick = () => { navTab(true); S.view = "over"; S.ov.anchor = keyOf(new Date()); render(); drawOver(); loadWeekSummary(); loadHabitDays(true); };
 $("#noteChip").onclick = () => noteListSheet();
+$("#dayPhoto").onclick = () => dayPhotoSheet();
 $("#tabSet").onclick = () => { navTab(true); S.view = "set"; render(); };
 $("#prevDay").onclick = () => openDay(shiftKey(S.dateKey, -1));
 $("#nextDay").onclick = () => openDay(shiftKey(S.dateKey, 1));
